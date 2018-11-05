@@ -1,0 +1,36 @@
+[user]
+	email = aharmon@rsglab.com
+	name = Alec Harmon
+[alias]
+	a = add
+	ca = commit --amend 
+	can = commit --amend --no-edit
+	pf = push --force-with-lease
+    pom = pull origin master
+    c = checkout
+	cm = checkout master
+	nb = checkout -b
+	dm = diff master
+	s = status
+	sync = cm && g fetch origin && g merge origin master
+    rename = branch -m
+    files = diff --name-status master 
+    lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+[hub]
+	host = git.rsglab.com
+[init]
+	templatedir = ~/.git-templates
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[rebase]
+	autosquash = true
+[core]
+	editor = vim
+	excludesfile = /Users/aharmon/.gitignore_global
+[diff]
+	tool = vimdiff
+[merge]
+	tool = vimdiff
