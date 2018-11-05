@@ -112,3 +112,7 @@ set undofile   " Maintain undo history between sessions
 filetype plugin indent on
 
 
+" Vimdiff
+:command UseRemote diffg REMOTE
+:command UseBase diffg BASE
+:command UseLocal diffg LOCAL
