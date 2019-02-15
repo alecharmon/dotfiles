@@ -16,6 +16,43 @@
     rename = branch -m
     files = diff --name-status master 
     lg = log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+
+    cp = cherry-pick
+	st = status --short
+	rc = rebase --continue
+	br = branch
+	cached = diff --cached
+	undo = reset --soft HEAD~1
+	show-patch = format-patch -1 --stdout
+	sha = rev-parse HEAD
+	origin = config --get remote.origin.url
+	current = rev-parse --abbrev-ref HEAD
+	out = !git log origin/$(git current)..
+	incoming = !git log ..origin/$(git current)
+	publish= !git push origin $(git current)
+	id = !echo "git clone --recursive $(git origin) --branch $(git current)"
+	recent = !git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads/ | head -n 100
+	fixup = "!f() { git commit --fixup=$1; git rebase -i --autosquash $1~1; }; f"
+	fixit = "!f() { git commit --fixup=$1; GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash $1~1; }; f"
+	wip = !git add --all . && git commit -m 'WIP'
+	root = !pwd
+	back = checkout -
+	upstream = !git branch --set-upstream-to=origin/$(git current) $(git current)
+	repo=!git remote -v | grep '@.*fetch' | sed 's/.*:\\(.*\\).git.*/\\1/g'
+	pr=!open https://github.com/$(git repo)/compare/$(git current)?expand=1
+
+# Welcome to pam/fzf heaven. xargs hell
+	pam= !BRANCH=`git recent | fzf` && git checkout ${BRANCH}
+	fadd= !FILES=`git status -s | awk '{ print $2 }' | fzf -x -m` && git add --all ${FILES}
+	ffix= !HASH=`git log --pretty=oneline | head -n 100 | fzf` && git fixit `echo ${HASH} | awk '{ print $1 }'`
+	fshow= !HASH=`git log --pretty=oneline | head -n 100 | fzf` && git show `echo ${HASH} | awk '{ print $1 }'`
+	flog= !HASH=`git log --pretty=oneline | head -n 100 | fzf` && echo ${HASH} | awk '{ print $1 }' | xargs echo -n | pbcopy
+	frebase= !HASH=`git log --pretty=oneline | head -n 100 | fzf` && git rebase -i `echo ${HASH} | awk '{ print $1 }'`^
+	fvim= !FILES=`git status -s | awk '{ print $2 }' | fzf -x -m` && vim -O ${FILES}
+	fvimconflicts= !FILES=`git status -s | grep '^[UMDA]\\{2\\} ' | awk '{ print $2 }' | fzf -x -m` && vim -O ${FILES}
+	fgrep= !sh -c 'FILES=`git grep -l -A 0 -B 0 $1 $2 | fzf -x -m` && vim -O `echo ${FILES} | cut -d':' -f1 | xargs`' -
+	fvimlog= !HASH=`git log --pretty=oneline | head -n 50 | fzf` && HASHZ=`echo ${HASH} | awk '{ print $1 }'` && FILES=`git show --pretty='format:' --name-only $HASHZ | grep -v -e '^$' | fzf -x -m` && vim -O 
+
 [hub]
 	host = git.rsglab.com
 [init]

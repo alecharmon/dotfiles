@@ -1,10 +1,32 @@
+"set escape to 'jk'
+map! jk <esc>
+
 " vim plug
 call plug#begin('~/.vim/plugged')
 
-" Auto Complete
-Plug 'ncm2/ncm2'
-Plug 'roxma/nvim-yarp'
+" ctl p
+Plug 'https://github.com/ctrlpvim/ctrlp.vim'
 
+" Nerd Tree
+Plug 'https://github.com/scrooloose/nerdtree'
+"" Open if no file specified
+autocmd StdinReadPre * let s:std_in=1
+autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
+
+" Smooth Scrolling
+Plug 'https://github.com/terryma/vim-smooth-scroll'
+noremap <silent> <c-u> :call smooth_scroll#up(&scroll, 0, 2)<CR>
+noremap <silent> <c-d> :call smooth_scroll#down(&scroll, 0, 2)<CR>
+noremap <silent> <c-b> :call smooth_scroll#up(&scroll*2, 0, 4)<CR>
+noremap <silent> <c-f> :call smooth_scroll#down(&scroll*2, 0, 4)<CR>
+
+" Vim Go
+Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
+
+" CSV
+Plug 'chrisbra/csv.vim'
+
+" Auto Complete
 Plug 'autozimu/LanguageClient-neovim', {
     \ 'branch': 'next',
     \ 'do': 'bash install.sh',
@@ -26,12 +48,6 @@ let g:completor_python_omni_trigger = ".*"
 set formatexpr=LanguageClient_textDocument_rangeFormatting()
 set omnifunc=LanguageClient#complete
 
-
-"enable ncm2 for all buffers
-autocmd BufEnter * call ncm2#enable_for_buffer()
-" IMPORTANTE: :help Ncm2PopupOpen for more 0information
-set completeopt=noinsert,menuone,noselect
-
 " Git
 Plug 'airblade/vim-gitgutter'
 
@@ -50,10 +66,9 @@ set cursorline "cursor underline
 "Searching
 set incsearch           " search as characters are entered
 set hlsearch            " highlight matches
-nnoremap <leader><space> :nohlsearch<CR>
 
 " turn off search highlight
-nnoremap <leader><space> :nohlsearch<CR>
+nnoremap <leader>? :nohlsearch<CR>
 
 set nocompatible              " be iMproved, required
 filetyp off                  " required <<========== We can turn it on later
@@ -72,8 +87,6 @@ syntax on
 "leader to ,
 let mapleader=" "
 
-"set escape to 'jk'
-inoremap jk <esc>
 
 "grundle undo
 nnoremap <leader>u :GundoToggle<CR>
@@ -96,7 +109,7 @@ nnoremap <leader>\ :vsp<CR>
 nnoremap <leader>w :q<CR>
 
 "Create Tab
-nnoremap <leader>t :tabedit
+nnoremap <leader>t :tabedit 
 
 colorscheme desert
 " presets
