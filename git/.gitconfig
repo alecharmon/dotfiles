@@ -6,7 +6,7 @@
 	ca = commit --amend 
 	can = commit --amend --no-edit
 	pf = push --force-with-lease
-    pom = pull origin master
+    pom = pull origin master --rebase 
     c = checkout
 	cm = checkout master
 	nb = checkout -b
@@ -65,7 +65,6 @@
 [rebase]
 	autosquash = true
 [core]
-	editor = vim
 	excludesfile = /Users/aharmon/.gitignore_global
 [diff]
 	tool = vimdiff

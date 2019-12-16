@@ -51,5 +51,6 @@ windows:
       panes:
         - git s  
         - mycli
+  - editor: vim . 
   - server: 
-  - logs: cd cache/log/ ; tail -F -n 100 <<< for i in * | rosie match all.things 
+  - logs: (tail -f cache/log/default/all.log & echo $! > pid) | fzf; kill -9 $(<pid) 
