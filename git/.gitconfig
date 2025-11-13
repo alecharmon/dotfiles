@@ -1,6 +1,9 @@
-[user]
-	email = aharmon@rsglab.com
-	name = Alec Harmon
+[credential "https://github.com"]
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/opt/homebrew/bin/gh auth git-credential
 [alias]
 	a = add
 	ca = commit --amend 
