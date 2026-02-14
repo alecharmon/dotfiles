@@ -7,6 +7,8 @@ brew "fzf"
 brew "gh"
 brew "stow"
 brew "tmux"
+brew "carapace"
+brew "mise"
 
 # Mutagen
 brew "mutagen-io/mutagen/mutagen"

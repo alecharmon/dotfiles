@@ -1,7 +1,7 @@
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
-ZSH_THEME="robbyrussell"
+ZSH_THEME="funky"
 
 # Plugins
 plugins=(git zsh-fzf-history-search)
@@ -14,7 +14,7 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 # pnpm end
-eval "$(/Users/alecharmon/.local/bin/mise activate zsh)"
+eval "$(/opt/homebrew/bin/mise activate zsh)"
 
 ### ALIASES
 alias dc="docker compose"
@@ -47,3 +47,4 @@ export PATH="/Users/alecharmon/.antigravity/antigravity/bin:$PATH"
 
 # Local overrides and secrets (not tracked in git)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+export PATH="$HOME/.local/bin:$PATH"
