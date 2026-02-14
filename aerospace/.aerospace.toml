@@ -79,6 +79,8 @@ on-mode-changed = []
 # Fallback value (if you omit the key): mode.main.binding = {}
 [mode.main.binding]
 
+    
+
     # All possible keys:
     # - Letters.        a, b, c, ..., z
     # - Numbers.        0, 1, 2, ..., 9

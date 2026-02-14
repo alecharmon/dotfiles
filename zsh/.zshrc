@@ -1,7 +1,8 @@
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
-ZSH_THEME="funky"
+ZSH_THEME="gruvbox"
+SOLARIZED_THEME="dark"
 
 # Plugins
 plugins=(git zsh-fzf-history-search)
@@ -48,3 +49,4 @@ export PATH="/Users/alecharmon/.antigravity/antigravity/bin:$PATH"
 # Local overrides and secrets (not tracked in git)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 export PATH="$HOME/.local/bin:$PATH"
+

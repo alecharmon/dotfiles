@@ -34,8 +34,25 @@ echo "==> Stowing config packages..."
 for dir in "$DOTFILES_DIR"/*/; do
     pkg="$(basename "$dir")"
     [ "$pkg" = "scripts" ] && continue
+    [ "$pkg" = "vscode" ] && continue
     echo "    Stowing $pkg..."
     stow -d "$DOTFILES_DIR" -t "$HOME" "$pkg"
 done
+
+# VS Code settings (symlinked separately due to non-HOME path)
+VSCODE_USER_DIR="$HOME/Library/Application Support/Code/User"
+if [ -d "$VSCODE_USER_DIR" ]; then
+    echo "==> Linking VS Code settings..."
+    ln -sf "$DOTFILES_DIR/vscode/settings.json" "$VSCODE_USER_DIR/settings.json"
+    ln -sf "$DOTFILES_DIR/vscode/keybindings.json" "$VSCODE_USER_DIR/keybindings.json"
+fi
+
+# Install VS Code extensions
+if command -v code &>/dev/null; then
+    echo "==> Installing VS Code extensions..."
+    while IFS= read -r ext; do
+        code --install-extension "$ext" --force 2>/dev/null || true
+    done < "$DOTFILES_DIR/vscode/extensions.txt"
+fi
 
 echo "==> Done! All dotfiles linked and tools installed."
