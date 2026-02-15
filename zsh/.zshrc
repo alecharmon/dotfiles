@@ -27,7 +27,7 @@ export HISTSIZE=1000
 export SAVEHIST=1000
 
 fern_dev() {
-  FERN_NO_VERSION_REDIRECTION=true node --enable-source-maps ~/dev/fern/fern/packages/cli/cli/dist/prod-unminified/cli.cjs "$@"
+  FERN_NO_VERSION_REDIRECTION=true node --enable-source-maps ~/dev/fern/fern/packages/cli/cli/dist/prod/cli.cjs "$@"
 }
 
 # bun completions

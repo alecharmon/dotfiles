@@ -52,6 +52,9 @@
 	fgrep= !sh -c 'FILES=`git grep -l -A 0 -B 0 $1 $2 | fzf -x -m` && vim -O `echo ${FILES} | cut -d':' -f1 | xargs`' -
 	fvimlog= !HASH=`git log --pretty=oneline | head -n 50 | fzf` && HASHZ=`echo ${HASH} | awk '{ print $1 }'` && FILES=`git show --pretty='format:' --name-only $HASHZ | grep -v -e '^$' | fzf -x -m` && vim -O
 
+[includeIf "gitdir:~/dev/fern/fern-platform/"]
+	path = ~/.gitconfig-fern-platform
+
 [rebase]
 	autosquash = true
 [core]

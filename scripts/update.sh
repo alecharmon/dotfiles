@@ -13,6 +13,16 @@ git -C "$DOTFILES_DIR" pull
 echo "==> Running brew bundle..."
 brew bundle --file="$DOTFILES_DIR/Brewfile"
 
+# Install/update gruvbox zsh theme
+GRUVBOX_DIR="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/gruvbox"
+if [ -d "$GRUVBOX_DIR" ]; then
+    echo "==> Updating gruvbox zsh theme..."
+    git -C "$GRUVBOX_DIR" pull
+else
+    echo "==> Installing gruvbox zsh theme..."
+    git clone https://github.com/sbugzu/gruvbox-zsh.git "$GRUVBOX_DIR"
+fi
+
 # Re-stow all config packages
 echo "==> Re-stowing config packages..."
 for dir in "$DOTFILES_DIR"/*/; do
