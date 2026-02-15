@@ -11,6 +11,7 @@
   },
   "markdown-preview-enhanced.liveUpdate": true,
   "editor.fontSize": 16,
+  "terminal.integrated.fontFamily": "MesloLGS Nerd Font",
   "typescript.updateImportsOnFileMove.enabled": "always",
   "rust-analyzer.lens.references.adt.enable": true,
   "rust-analyzer.lens.references.method.enable": true,

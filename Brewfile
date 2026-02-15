@@ -13,5 +13,8 @@ brew "mise"
 # Mutagen
 brew "mutagen-io/mutagen/mutagen"
 
+# Fonts
+cask "font-meslo-lg-nerd-font"
+
 # Casks
 cask "nikitabobko/tap/aerospace"
