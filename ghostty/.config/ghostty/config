@@ -21,3 +21,7 @@ palette = 13=#d3869b
 palette = 14=#8ec07c
 palette = 15=#ebdbb2
 
+working-directory = ~/dev
+command = /opt/homebrew/bin/tmux new-session
+
+
