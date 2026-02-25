@@ -21,6 +21,7 @@ cask "font-sf-mono"
 cask "font-sf-pro"
 
 # SketchyBar
+brew "ical-buddy"
 brew "FelixKratz/formulae/sketchybar"
 brew "FelixKratz/formulae/borders"
 brew "lua"
