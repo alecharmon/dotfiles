@@ -164,6 +164,7 @@ local space_window_observer = sbar.add("item", {
 
 -- Handles the small icon indicator for spaces / menus changes
 local spaces_indicator = sbar.add("item", {
+    drawing = false,
     padding_left = -3,
     padding_right = 0,
     icon = {

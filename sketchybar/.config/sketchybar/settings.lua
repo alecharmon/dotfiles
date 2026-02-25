@@ -32,7 +32,7 @@ return {
             bottom = 0
         },
         default_color = function(workspace)
-            return colors.rainbow[workspace + 1]
+            return colors.grey
         end,
         highlight_color = function(workspace)
             return colors.yellow

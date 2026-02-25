@@ -71,7 +71,7 @@ end)
 sbar.add("bracket", "widgets.cpu.bracket", {cpu.name}, {
     background = {
         color = colors.bg1,
-        border_color = colors.rainbow[#colors.rainbow - 5],
+        border_color = colors.grey,
         border_width = 1
     }
 })
