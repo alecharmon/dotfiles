@@ -39,6 +39,27 @@ for dir in "$DOTFILES_DIR"/*/; do
     stow -d "$DOTFILES_DIR" -t "$HOME" "$pkg"
 done
 
+# SketchyBar dependencies
+echo "==> Installing SketchyBar dependencies..."
+# App font
+if [ ! -f "$HOME/Library/Fonts/sketchybar-app-font.ttf" ]; then
+    echo "    Downloading sketchybar-app-font..."
+    curl -L https://github.com/kvndrsslr/sketchybar-app-font/releases/download/v2.0.53/sketchybar-app-font.ttf -o "$HOME/Library/Fonts/sketchybar-app-font.ttf"
+fi
+# SbarLua
+if [ ! -f "$HOME/.local/share/sketchybar_lua/sketchybar.so" ]; then
+    echo "    Building SbarLua..."
+    git clone https://github.com/FelixKratz/SbarLua.git /tmp/SbarLua
+    (cd /tmp/SbarLua && make install)
+    rm -rf /tmp/SbarLua
+fi
+# Build sketchybar C helpers (menus, event providers)
+SKETCHYBAR_HELPERS="$HOME/.config/sketchybar/helpers"
+if [ -d "$SKETCHYBAR_HELPERS" ]; then
+    echo "    Building sketchybar helpers..."
+    (cd "$SKETCHYBAR_HELPERS" && make)
+fi
+
 # VS Code settings (symlinked separately due to non-HOME path)
 VSCODE_USER_DIR="$HOME/Library/Application Support/Code/User"
 if [ -d "$VSCODE_USER_DIR" ]; then
