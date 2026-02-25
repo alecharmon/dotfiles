@@ -28,12 +28,12 @@ end
 
 for i, workspace in ipairs(workspaces) do
     local selected = workspace == current_workspace
-    local space = sbar.add("item", "item." .. i, {
+    local space = sbar.add("item", "space." .. workspace, {
         icon = {
             font = {
                 family = settings.font.numbers
             },
-            string = i,
+            string = workspace,
             padding_left = settings.items.padding.left,
             padding_right = settings.items.padding.left / 2,
             color = settings.items.default_color(i),
@@ -67,7 +67,7 @@ for i, workspace in ipairs(workspaces) do
     spaces[i] = space
 
     -- Define the icons for open apps on each space initially
-    sbar.exec("aerospace list-windows --workspace " .. i .. " --format '%{app-name}' --json ", function(apps)
+    sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
         local icon_line = ""
         local no_app = true
         for _, app in ipairs(apps) do
@@ -91,7 +91,7 @@ for i, workspace in ipairs(workspaces) do
     end)
 
     -- Padding space between each item
-    paddings[i] = sbar.add("item", "item." .. i .. "padding", {
+    paddings[i] = sbar.add("item", "space." .. workspace .. ".padding", {
         script = "",
         width = settings.items.gap
     })
@@ -124,7 +124,7 @@ for i, workspace in ipairs(workspaces) do
             }
         })
         -- Update visibility: show focused workspace even if empty
-        sbar.exec("aerospace list-windows --workspace " .. i .. " --format '%{app-name}' --json ", function(apps)
+        sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
             update_visibility(i, workspace, apps, selected)
         end)
     end)
@@ -134,7 +134,7 @@ for i, workspace in ipairs(workspaces) do
         if env.BUTTON == "other" then
             space_popup:set({
                 background = {
-                    image = "item." .. SID
+                    image = "space." .. SID
                 }
             })
             space:set({
@@ -189,7 +189,7 @@ local spaces_indicator = sbar.add("item", {
 local function refresh_spaces()
     local focused = get_current_workspace()
     for i, workspace in ipairs(workspaces) do
-        sbar.exec("aerospace list-windows --workspace " .. i .. " --format '%{app-name}' --json ", function(apps)
+        sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
             local icon_line = ""
             local no_app = true
             for _, app in ipairs(apps) do
@@ -223,7 +223,7 @@ end)
 space_window_observer:subscribe("space_windows_change", function(env)
     local focused = get_current_workspace()
     for i, workspace in ipairs(workspaces) do
-        sbar.exec("aerospace list-windows --workspace " .. i .. " --format '%{app-name}' --json ", function(apps)
+        sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
             local icon_line = ""
             local no_app = true
             for _, app in ipairs(apps) do
@@ -251,7 +251,7 @@ end)
 space_window_observer:subscribe("aerospace_focus_change", function(env)
     local focused = get_current_workspace()
     for i, workspace in ipairs(workspaces) do
-        sbar.exec("aerospace list-windows --workspace " .. i .. " --format '%{app-name}' --json ", function(apps)
+        sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
             local icon_line = ""
             local no_app = true
             for _, app in ipairs(apps) do
