@@ -22,6 +22,7 @@ cask "font-sf-pro"
 
 # SketchyBar
 brew "FelixKratz/formulae/sketchybar"
+brew "FelixKratz/formulae/borders"
 brew "lua"
 brew "switchaudio-osx"
 brew "nowplaying-cli"
