@@ -8,6 +8,26 @@ SOLARIZED_THEME="dark"
 plugins=(git zsh-fzf-history-search)
 source $ZSH/oh-my-zsh.sh
 
+# Show only current directory name in prompt (not full path)
+PROMPT="${PROMPT//%~/%1~}"
+
+# Replace OS icon with 🤙, show ❌ if last command failed
+prompt_context() {
+  if [[ $RETVAL -ne 0 ]]; then
+    prompt_segment 237 7 "❌"
+  else
+    prompt_segment 237 7 "🤙"
+  fi
+}
+
+# Remove broken heart error indicator
+prompt_status() {
+  local -a symbols
+  [[ $UID -eq 0 ]] && symbols+="%{%F{11}%}\ue77a"
+  [[ $(jobs -l | wc -l) -gt 0 ]] && symbols+="%{%F{15}%}\ufb36"
+  [[ -n "$symbols" ]] && prompt_segment 166 7 "$symbols"
+}
+
 # pnpm
 export PNPM_HOME="/Users/alecharmon/Library/pnpm"
 case ":$PATH:" in
