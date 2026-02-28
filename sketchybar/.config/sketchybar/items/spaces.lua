@@ -9,6 +9,26 @@ local paddings = {}
 local workspaces = get_workspaces()
 local current_workspace = get_current_workspace()
 
+local function build_icon_line(apps)
+    local seen = {}
+    local icon_line = ""
+    local no_app = true
+    for _, app in ipairs(apps) do
+        local app_name = app["app-name"]
+        if not seen[app_name] then
+            seen[app_name] = true
+            no_app = false
+            local lookup = app_icons[app_name]
+            local icon = ((lookup == nil) and app_icons["default"] or lookup)
+            icon_line = icon_line .. " " .. icon
+        end
+    end
+    if no_app then
+        icon_line = " —"
+    end
+    return icon_line
+end
+
 local function update_visibility(i, workspace, apps, is_focused)
     local has_windows = #apps > 0
     local visible = has_windows or is_focused
@@ -68,20 +88,7 @@ for i, workspace in ipairs(workspaces) do
 
     -- Define the icons for open apps on each space initially
     sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
-        local icon_line = ""
-        local no_app = true
-        for _, app in ipairs(apps) do
-            no_app = false
-            local app_name = app["app-name"]
-            local lookup = app_icons[app_name]
-            local icon = ((lookup == nil) and app_icons["default"] or lookup)
-            icon_line = icon_line .. " " .. icon
-        end
-
-        if no_app then
-            icon_line = " —"
-        end
-
+        local icon_line = build_icon_line(apps)
         sbar.animate("tanh", 10, function()
             space:set({
                 label = icon_line
@@ -190,20 +197,7 @@ local function refresh_spaces()
     local focused = get_current_workspace()
     for i, workspace in ipairs(workspaces) do
         sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
-            local icon_line = ""
-            local no_app = true
-            for _, app in ipairs(apps) do
-                no_app = false
-                local app_name = app["app-name"]
-                local lookup = app_icons[app_name]
-                local icon = ((lookup == nil) and app_icons["default"] or lookup)
-                icon_line = icon_line .. " " .. icon
-            end
-
-            if no_app then
-                icon_line = " —"
-            end
-
+            local icon_line = build_icon_line(apps)
             sbar.animate("tanh", 10, function()
                 spaces[i]:set({
                     label = icon_line
@@ -224,20 +218,7 @@ space_window_observer:subscribe("space_windows_change", function(env)
     local focused = get_current_workspace()
     for i, workspace in ipairs(workspaces) do
         sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
-            local icon_line = ""
-            local no_app = true
-            for _, app in ipairs(apps) do
-                no_app = false
-                local app_name = app["app-name"]
-                local lookup = app_icons[app_name]
-                local icon = ((lookup == nil) and app_icons["default"] or lookup)
-                icon_line = icon_line .. " " .. icon
-            end
-
-            if no_app then
-                icon_line = " —"
-            end
-
+            local icon_line = build_icon_line(apps)
             sbar.animate("tanh", 10, function()
                 spaces[i]:set({
                     label = icon_line
@@ -252,20 +233,7 @@ space_window_observer:subscribe("aerospace_focus_change", function(env)
     local focused = get_current_workspace()
     for i, workspace in ipairs(workspaces) do
         sbar.exec("aerospace list-windows --workspace " .. workspace .. " --format '%{app-name}' --json ", function(apps)
-            local icon_line = ""
-            local no_app = true
-            for _, app in ipairs(apps) do
-                no_app = false
-                local app_name = app["app-name"]
-                local lookup = app_icons[app_name]
-                local icon = ((lookup == nil) and app_icons["default"] or lookup)
-                icon_line = icon_line .. " " .. icon
-            end
-
-            if no_app then
-                icon_line = " —"
-            end
-
+            local icon_line = build_icon_line(apps)
             sbar.animate("tanh", 10, function()
                 spaces[i]:set({
                     label = icon_line
