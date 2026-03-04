@@ -50,9 +50,28 @@ sbar.add("item", {
     width = settings.group_paddings
 })
 
-cal:subscribe({"forced", "routine", "system_woke"}, function(env)
+local show_utc = false
+
+local function update_time()
+    local label, width
+    if show_utc then
+        label = os.date("!%m/%d %H:%M UTC")
+        width = 110
+    else
+        label = os.date("%m/%d %H:%M")
+        width = 80
+    end
     cal:set({
         icon = "",
-        label = os.date("%m/%d %H:%M")
+        label = { string = label, width = width }
     })
+end
+
+cal:subscribe({"forced", "routine", "system_woke"}, function(env)
+    update_time()
+end)
+
+cal:subscribe("mouse.clicked", function(env)
+    show_utc = not show_utc
+    update_time()
 end)
