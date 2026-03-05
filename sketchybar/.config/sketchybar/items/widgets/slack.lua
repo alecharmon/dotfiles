@@ -29,6 +29,7 @@ local slack = sbar.add("item", "widgets.slack", {
         border_color = colors.grey,
         border_width = 1
     },
+    updates = "on",
     update_freq = 5
 })
 

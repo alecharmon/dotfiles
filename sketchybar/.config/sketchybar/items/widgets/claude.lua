@@ -28,6 +28,7 @@ local claude = sbar.add("item", "widgets.claude", {
         border_color = colors.yellow,
         border_width = 1
     },
+    updates = "on",
     update_freq = 5
 })
 
