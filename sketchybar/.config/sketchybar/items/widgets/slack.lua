@@ -6,11 +6,12 @@ local slack = sbar.add("item", "widgets.slack", {
     position = "right",
     drawing = false,
     icon = {
-        string = ":slack:",
+        string = "󰒱",
         color = colors.white,
         padding_left = 8,
         font = {
-            family = settings.icons
+            family = settings.font.text,
+            size = 16.0
         }
     },
     label = {

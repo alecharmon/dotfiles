@@ -5,11 +5,12 @@ local claude = sbar.add("item", "widgets.claude", {
     position = "right",
     drawing = false,
     icon = {
-        string = ":claude:",
+        string = "󰧑",
         color = colors.yellow,
         padding_left = 8,
         font = {
-            family = settings.icons
+            family = settings.font.text,
+            size = 16.0
         }
     },
     label = {
