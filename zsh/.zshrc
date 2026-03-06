@@ -66,6 +66,9 @@ source <(carapace _carapace)
 # Added by Antigravity
 export PATH="/Users/alecharmon/.antigravity/antigravity/bin:$PATH"
 
+# worktrunk shell integration
+eval "$(wt config shell init zsh)"
+
 # Local overrides and secrets (not tracked in git)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 export PATH="$HOME/.local/bin:$PATH"

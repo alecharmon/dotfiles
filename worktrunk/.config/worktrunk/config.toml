@@ -1,0 +1,20 @@
+# Worktrunk configuration
+# https://worktrunk.dev/config/
+
+# Where new worktrees are created
+worktree-path = "{{ repo_path }}/.worktrees/{{ branch | sanitize }}"
+
+# LLM-generated commit messages
+[commit.generation]
+command = "claude -p --model=haiku 'Write a concise commit message for these changes' || git log --oneline -1 --format='wip: %s'"
+
+# Default behaviors
+[commit]
+stage = "tracked"
+
+[merge]
+squash = true
+remove = true
+
+[post-switch]
+tmux = "[ -n \"$TMUX\" ] && tmux rename-window {{ branch | sanitize }}"

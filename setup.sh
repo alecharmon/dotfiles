@@ -48,9 +48,9 @@ if [ ! -f "$HOME/Library/Fonts/sketchybar-app-font.ttf" ]; then
 fi
 # SbarLua
 if [ ! -f "$HOME/.local/share/sketchybar_lua/sketchybar.so" ]; then
-    echo "    Building SbarLua..."
+    echo "    Building SbarLua (Lua 5.4 compat)..."
     git clone https://github.com/FelixKratz/SbarLua.git /tmp/SbarLua
-    (cd /tmp/SbarLua && make install)
+    (cd /tmp/SbarLua && git checkout 437bd20 && make install)
     rm -rf /tmp/SbarLua
 fi
 # Build sketchybar C helpers (menus, event providers)
@@ -58,6 +58,12 @@ SKETCHYBAR_HELPERS="$HOME/.config/sketchybar/helpers"
 if [ -d "$SKETCHYBAR_HELPERS" ]; then
     echo "    Building sketchybar helpers..."
     (cd "$SKETCHYBAR_HELPERS" && make)
+fi
+
+# Worktrunk shell integration
+if command -v wt &>/dev/null; then
+    echo "==> Installing worktrunk shell integration..."
+    wt config shell install
 fi
 
 # VS Code settings (symlinked separately due to non-HOME path)

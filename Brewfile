@@ -10,6 +10,7 @@ brew "stow"
 brew "tmux"
 brew "carapace"
 brew "mise"
+brew "worktrunk"
 
 # Mutagen
 brew "mutagen-io/mutagen/mutagen"
@@ -24,7 +25,7 @@ cask "font-sf-pro"
 brew "ical-buddy"
 brew "FelixKratz/formulae/sketchybar"
 brew "FelixKratz/formulae/borders"
-brew "lua"
+brew "lua@5.4"
 brew "switchaudio-osx"
 brew "nowplaying-cli"
 
