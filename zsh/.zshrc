@@ -41,6 +41,7 @@ eval "$(/opt/homebrew/bin/mise activate zsh)"
 alias dc="docker compose"
 alias dcu="docker compose up -d"
 alias dcb="docker-compose exec code bash"
+alias grt='cd "$(git rev-parse --show-toplevel)"'
 
 export HISTFILE="$HOME/.zsh_history"
 export HISTSIZE=1000
@@ -73,3 +74,10 @@ eval "$(wt config shell init zsh)"
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 export PATH="$HOME/.local/bin:$PATH"
 
+
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
+
+# opencode
+export PATH=/Users/alecharmon/.opencode/bin:$PATH
+
+alias claude-mem='bun "/Users/alecharmon/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/scripts/worker-service.cjs"'
