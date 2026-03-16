@@ -29,6 +29,12 @@ if [ ! -d "$ZSH_CUSTOM/plugins/zsh-fzf-history-search" ]; then
     git clone https://github.com/joshskidmore/zsh-fzf-history-search "$ZSH_CUSTOM/plugins/zsh-fzf-history-search"
 fi
 
+# Install gh extensions
+if command -v gh &>/dev/null; then
+    echo "==> Installing gh extensions..."
+    gh extension install dlvhdr/gh-dash 2>/dev/null || true
+fi
+
 # Stow all config packages
 echo "==> Stowing config packages..."
 for dir in "$DOTFILES_DIR"/*/; do

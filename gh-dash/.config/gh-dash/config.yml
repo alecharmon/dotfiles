@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://gh-dash.dev/schema.json
+prSections:
+  - title: My PRs
+    filters: is:open author:@me org:fern-api sort:updated-desc
+  - title: Needs My Review
+    filters: is:open review-requested:@me org:fern-api sort:updated-desc
+  - title: Team PRs
+    filters: is:open org:fern-api sort:updated-desc
+
+keybindings:
+  prs:
+    - key: x
+      command: gh pr close --repo {{.RepoName}} {{.PrNumber}}
+
+defaults:
+  view: prs
+  refetchIntervalMinutes: 1
+  prsLimit: 20
+  issuesLimit: 20
+  preview:
+    open: true
+    width: 0.45
+theme:
+  ui:
+    sectionsShowCount: true
+    table:
+      showSeparator: true
+      compact: false
