@@ -66,6 +66,15 @@ if [ -d "$SKETCHYBAR_HELPERS" ]; then
     (cd "$SKETCHYBAR_HELPERS" && make)
 fi
 
+# Screensaver CLI
+SCREENSAVER_DIR="$DOTFILES_DIR/../screensaver"
+if [ -d "$SCREENSAVER_DIR" ]; then
+    echo "==> Building and installing screensaver..."
+    (cd "$SCREENSAVER_DIR" && go install ./cmd/...)
+else
+    echo "==> Screensaver repo not found at $SCREENSAVER_DIR, skipping..."
+fi
+
 # Worktrunk shell integration
 if command -v wt &>/dev/null; then
     echo "==> Installing worktrunk shell integration..."

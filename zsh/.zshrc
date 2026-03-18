@@ -80,3 +80,4 @@ if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)
 export PATH=/Users/alecharmon/.opencode/bin:$PATH
 
 alias claude-mem='bun "/Users/alecharmon/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/scripts/worker-service.cjs"'
+export PATH="$PATH:/Users/alecharmon/go/bin"
