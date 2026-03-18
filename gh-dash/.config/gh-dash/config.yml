@@ -1,16 +1,20 @@
 # yaml-language-server: $schema=https://gh-dash.dev/schema.json
 prSections:
-  - title: My PRs
-    filters: is:open author:@me org:fern-api sort:updated-desc
   - title: Needs My Review
     filters: is:open review-requested:@me org:fern-api sort:updated-desc
+  - title: My PRs
+    filters: is:open author:@me org:fern-api sort:updated-desc
   - title: Team PRs
     filters: is:open org:fern-api sort:updated-desc
+  - title: Recently Closed
+    filters: is:closed author:@me org:fern-api sort:updated-desc
 
 keybindings:
   prs:
     - key: x
       command: gh pr close --repo {{.RepoName}} {{.PrNumber}}
+    - key: o
+      command: open -a Safari "https://github.com/{{.RepoName}}/pull/{{.PrNumber}}"
 
 defaults:
   view: prs

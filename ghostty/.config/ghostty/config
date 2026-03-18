@@ -25,4 +25,4 @@ background-opacity = 0.85
 working-directory = ~/dev
 command = /opt/homebrew/bin/tmux new-session
 
-
+keybind = super+enter=unbind

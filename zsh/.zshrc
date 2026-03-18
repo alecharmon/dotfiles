@@ -81,3 +81,23 @@ export PATH=/Users/alecharmon/.opencode/bin:$PATH
 
 alias claude-mem='bun "/Users/alecharmon/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/scripts/worker-service.cjs"'
 export PATH="$PATH:/Users/alecharmon/go/bin"
+
+# @ triggers fzf file picker, inserts selected path into command line
+# Cancel fzf (Esc/Ctrl-C) to insert a literal @
+fzf-file-at() {
+  local selected
+  selected=$(fd --type f --hidden --exclude .git | \
+    awk -F/ '{print NF-1 "\t" $0}' | sort -n | cut -f2- | \
+    fzf --height=40% --reverse --border --prompt="@ " \
+      --tiebreak=index \
+      --bind "ctrl-u:reload(fd --type f --hidden --exclude .git . {q} 2>/dev/null)+clear-query" \
+      --header="ctrl-u: search from typed path")
+  if [[ -n "$selected" ]]; then
+    LBUFFER+="$selected"
+  else
+    LBUFFER+="@"
+  fi
+  zle redisplay
+}
+zle -N fzf-file-at
+bindkey '@' fzf-file-at
