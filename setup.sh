@@ -35,6 +35,9 @@ if command -v gh &>/dev/null; then
     gh extension install dlvhdr/gh-dash 2>/dev/null || true
 fi
 
+# Ensure .claude directory exists (stow needs the parent)
+mkdir -p "$HOME/.claude"
+
 # Stow all config packages
 echo "==> Stowing config packages..."
 for dir in "$DOTFILES_DIR"/*/; do
