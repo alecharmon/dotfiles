@@ -20,6 +20,8 @@ defaults:
   preview:
     open: true
     width: 0.45
+pager:
+  diff: delta
 theme:
   ui:
     sectionsShowCount: true

@@ -10,6 +10,7 @@ brew "stow"
 brew "tmux"
 brew "carapace"
 brew "mise"
+brew "git-delta"
 brew "worktrunk"
 
 # Mutagen
