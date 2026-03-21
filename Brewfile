@@ -1,5 +1,6 @@
 tap "mutagen-io/mutagen"
 tap "nikitabobko/tap"
+tap "TheBoredTeam/boring-notch"
 tap "FelixKratz/formulae"
 
 # Core tools
@@ -32,3 +33,4 @@ brew "nowplaying-cli"
 
 # Casks
 cask "nikitabobko/tap/aerospace"
+cask "TheBoredTeam/boring-notch/boring-notch"

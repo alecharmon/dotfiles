@@ -1,27 +1,27 @@
 return {
-    black = 0xff181819,
-    white = 0xffe2e2e3,
-    red = 0xfffc5d7c,
-    green = 0xff9ed072,
-    blue = 0xff76cce0,
-    yellow = 0xffe7c664,
-    orange = 0xfff39660,
-    magenta = 0xffb39df3,
-    grey = 0xff7f8490,
+    black = 0xff1a1b26,
+    white = 0xffc0caf5,
+    red = 0xfff7768e,
+    green = 0xff9ece6a,
+    blue = 0xff7aa2f7,
+    yellow = 0xffe0af68,
+    orange = 0xffff9e64,
+    magenta = 0xffbb9af7,
+    grey = 0xff565f89,
     transparent = 0x00000000,
 
     bar = {
-        bg = 0xd02c2e34,
-        border = 0xff2c2e34
+        bg = 0xd016161e,
+        border = 0xff16161e
     },
     popup = {
-        bg = 0xc02c2e34,
-        border = 0xff7f8490
+        bg = 0xc024283b,
+        border = 0xff565f89
     },
-    bg1 = 0xff363944,
-    bg2 = 0xff414550,
+    bg1 = 0xff24283b,
+    bg2 = 0xff414868,
 
-    rainbow = {0xffff007c, 0xffc53b53, 0xffff757f, 0xff41a6b5, 0xff4fd6be, 0xffc3e88d, 0xffffc777, 0xff9d7cd8,
+    rainbow = {0xfff7768e, 0xff9ece6a, 0xffe0af68, 0xff7aa2f7, 0xffbb9af7, 0xff7dcfff, 0xff2ac3de, 0xffc0caf5,
                0xffff9e64, 0xffbb9af7, 0xff7dcfff, 0xff7aa2f7},
 
     with_alpha = function(color, alpha)
