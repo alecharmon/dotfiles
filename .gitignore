@@ -1,7 +1,2 @@
 .DS_Store
-claude/.claude/backups/
-claude/.claude/cache/
-claude/.claude/file-history/
-claude/.claude/history.jsonl
-claude/.claude/projects/
-claude/.claude/shell-snapshots/
+claude/

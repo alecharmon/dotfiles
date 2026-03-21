@@ -14,6 +14,8 @@ brew "mise"
 brew "git-delta"
 brew "television"
 brew "worktrunk"
+brew "bat"
+brew "fd"
 
 # Mutagen
 brew "mutagen-io/mutagen/mutagen"

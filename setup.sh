@@ -35,18 +35,22 @@ if command -v gh &>/dev/null; then
     gh extension install dlvhdr/gh-dash 2>/dev/null || true
 fi
 
-# Ensure .claude directory exists (stow needs the parent)
-mkdir -p "$HOME/.claude"
-
 # Stow all config packages
 echo "==> Stowing config packages..."
+stow_failures=()
 for dir in "$DOTFILES_DIR"/*/; do
     pkg="$(basename "$dir")"
     [ "$pkg" = "scripts" ] && continue
     [ "$pkg" = "vscode" ] && continue
     echo "    Stowing $pkg..."
-    stow -d "$DOTFILES_DIR" -t "$HOME" "$pkg"
+    if ! stow -d "$DOTFILES_DIR" -t "$HOME" "$pkg" 2>&1; then
+        stow_failures+=("$pkg")
+    fi
 done
+if [ ${#stow_failures[@]} -gt 0 ]; then
+    echo "==> WARNING: Failed to stow: ${stow_failures[*]}"
+    echo "    Resolve conflicts manually and re-run."
+fi
 
 # SketchyBar dependencies
 echo "==> Installing SketchyBar dependencies..."
