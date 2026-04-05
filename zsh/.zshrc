@@ -57,12 +57,6 @@ fern_dev() {
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
-# carapace auto complete
-autoload -U compinit && compinit
-export CARAPACE_BRIDGES='zsh,fish,bash,inshellisense' # optional
-zstyle ':completion:*' format $'\e[2;37mCompleting %d\e[m'
-source <(carapace _carapace)
-
 # Added by Antigravity
 export PATH="/Users/alecharmon/.antigravity/antigravity/bin:$PATH"
 
