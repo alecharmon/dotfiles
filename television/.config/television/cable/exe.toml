@@ -1,0 +1,54 @@
+[metadata]
+name = "exe"
+description = "Manage exe.dev VMs"
+requirements = ["ssh", "jq"]
+
+[source]
+command = "ssh exe.dev ls --json | jq -r '.vms[].vm_name'"
+
+[preview]
+command = "ssh exe.dev ls --json | jq -r '.vms[] | select(.vm_name == \"{}\") | \"VM: \\(.vm_name)\\nStatus: \\(.status)\\nImage: \\(.image)\\nRegion: \\(.region_display)\\nCreated: \\(.created_at)\\nURL: \\(.https_url)\\nSSH: \\(.ssh_dest)\"'"
+
+[keybindings]
+enter = "actions:ssh"
+ctrl-o = "actions:open"
+ctrl-n = "actions:new"
+ctrl-r = "actions:restart"
+ctrl-d = "actions:delete"
+ctrl-y = "actions:copy"
+ctrl-e = "actions:rename"
+
+[actions.ssh]
+description = "SSH into VM"
+command = "zsh -c 'c=\"ssh {}@exe.dev\"; vared -p \"run: \" -c c; [ -n \"$c\" ] && eval $c'"
+mode = "execute"
+
+[actions.open]
+description = "Open VM in browser"
+command = "zsh -c 'c=\"open https://{}.exe.xyz/\"; vared -p \"run: \" -c c; [ -n \"$c\" ] && eval $c'"
+mode = "execute"
+
+[actions.new]
+description = "Create new VM"
+command = "zsh -c 'c=\"ssh exe.dev new --name=\"; vared -p \"run: \" -c c; [ -n \"$c\" ] && eval $c'"
+mode = "execute"
+
+[actions.restart]
+description = "Restart VM"
+command = "zsh -c 'c=\"ssh exe.dev restart {}\"; vared -p \"run: \" -c c; [ -n \"$c\" ] && eval $c'"
+mode = "execute"
+
+[actions.delete]
+description = "Delete VM"
+command = "zsh -c 'c=\"ssh exe.dev rm {}\"; vared -p \"run: \" -c c; [ -n \"$c\" ] && eval $c'"
+mode = "execute"
+
+[actions.copy]
+description = "Copy VM"
+command = "zsh -c 'c=\"ssh exe.dev cp {} \"; vared -p \"run: \" -c c; [ -n \"$c\" ] && eval $c'"
+mode = "execute"
+
+[actions.rename]
+description = "Rename VM"
+command = "zsh -c 'c=\"ssh exe.dev rename {} \"; vared -p \"run: \" -c c; [ -n \"$c\" ] && eval $c'"
+mode = "execute"

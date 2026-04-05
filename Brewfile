@@ -16,6 +16,8 @@ brew "television"
 brew "worktrunk"
 brew "bat"
 brew "fd"
+brew "jq"
+brew "rg"
 
 # Mutagen
 brew "mutagen-io/mutagen/mutagen"

@@ -83,7 +83,7 @@
     "*.sqlite3": "${capture}.${extname}-*",
     "*.db3": "${capture}.${extname}-*",
     "*.sdb": "${capture}.${extname}-*",
-    "*.s3db": "${capture}.${extname}-*",
+    "*.s3db": "${capture}.${extname}-*"
   },
   "github.copilot.nextEditSuggestions.enabled": true,
   "docker.extension.enableComposeLanguageServer": false,
@@ -119,4 +119,5 @@
     "https://json-schema.org/": true,
     "https://biomejs.dev": true
   },
+  "security.promptForRemoteFileProtocolHandling": false,
 }
