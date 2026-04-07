@@ -35,12 +35,16 @@ if command -v gh &>/dev/null; then
     gh extension install dlvhdr/gh-dash 2>/dev/null || true
 fi
 
+# Install code agent skills from tracked manifest
+bash "$DOTFILES_DIR/skills/install.sh"
+
 # Stow all config packages
 echo "==> Stowing config packages..."
 stow_failures=()
 for dir in "$DOTFILES_DIR"/*/; do
     pkg="$(basename "$dir")"
     [ "$pkg" = "scripts" ] && continue
+    [ "$pkg" = "skills" ] && continue
     [ "$pkg" = "vscode" ] && continue
     echo "    Stowing $pkg..."
     if ! stow -d "$DOTFILES_DIR" -t "$HOME" "$pkg" 2>&1; then

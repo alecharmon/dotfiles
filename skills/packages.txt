@@ -1,0 +1,10 @@
+# One skills.sh source per line.
+# Examples:
+# vercel-labs/agent-skills
+# https://github.com/example-org/example-skills
+# cmd: npx claude-mem install
+
+cmd: npx claude-mem install
+https://github.com/get-convex/agent-skills
+https://github.com/anthropics/skills --skill frontend-design
+https://github.com/vercel-labs/agent-browser
