@@ -11,6 +11,6 @@ aerospace list-windows --all --format '%{app-bundle-id}|%{window-id}' | while IF
         com.tinyspeck.slackmacgap)
             aerospace move-node-to-workspace --window-id "$window_id" 4 ;;
         *)
-            aerospace move-node-to-workspace --window-id "$window_id" 4 ;;
+            aerospace move-node-to-workspace --window-id "$window_id" 5 ;;
     esac
 done
