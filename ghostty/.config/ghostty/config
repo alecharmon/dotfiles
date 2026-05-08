@@ -26,3 +26,7 @@ working-directory = ~/dev
 command = /opt/homebrew/bin/tmux new-session
 
 keybind = super+enter=unbind
+
+# Send private escape sequences for tmux Hyper-[ / Hyper-] window navigation
+keybind = super+ctrl+alt+shift+[=text:\x1b[5;30012~
+keybind = super+ctrl+alt+shift+]=text:\x1b[5;30013~
