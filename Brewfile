@@ -17,6 +17,7 @@ brew "bat"
 brew "fd"
 brew "jq"
 brew "rg"
+brew "code-cli"
 
 # Mutagen
 brew "mutagen-io/mutagen/mutagen"

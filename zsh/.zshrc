@@ -28,7 +28,7 @@ prompt_status() {
 }
 
 # pnpm
-export PNPM_HOME="/Users/alecharmon/Library/pnpm"
+export PNPM_HOME="$HOME/Library/pnpm"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
@@ -51,14 +51,14 @@ fern_dev() {
 }
 
 # bun completions
-[ -s "/Users/alecharmon/.bun/_bun" ] && source "/Users/alecharmon/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 # Added by Antigravity
-export PATH="/Users/alecharmon/.antigravity/antigravity/bin:$PATH"
+export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
 
 # worktrunk shell integration
 eval "$(wt config shell init zsh)"
@@ -71,10 +71,10 @@ export PATH="$HOME/.local/bin:$PATH"
 if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
 
 # opencode
-export PATH=/Users/alecharmon/.opencode/bin:$PATH
+export PATH="$HOME/.opencode/bin:$PATH"
 
-alias claude-mem='bun "/Users/alecharmon/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/scripts/worker-service.cjs"'
-export PATH="$PATH:/Users/alecharmon/go/bin"
+alias claude-mem='bun "$HOME/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/scripts/worker-service.cjs"'
+export PATH="$PATH:$HOME/go/bin"
 
 # @ triggers fzf file picker, inserts selected path into command line
 # Cancel fzf (Esc/Ctrl-C) to insert a literal @

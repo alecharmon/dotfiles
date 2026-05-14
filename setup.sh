@@ -16,6 +16,19 @@ fi
 echo "==> Installing packages from Brewfile..."
 brew bundle --file="$DOTFILES_DIR/Brewfile"
 
+# Configure VS Code CLI standalone to use Code - OSS when available.
+# Override CODE_CLI_INSTALL_DIR if Code - OSS is installed outside /Applications.
+CODE_CLI_INSTALL_DIR="${CODE_CLI_INSTALL_DIR:-/Applications/Code - OSS.app}"
+if command -v code &>/dev/null; then
+    echo "==> Configuring code-cli to use Code - OSS..."
+    if [ -e "$CODE_CLI_INSTALL_DIR" ]; then
+        code version use oss --install-dir "$CODE_CLI_INSTALL_DIR"
+    else
+        echo "    Code - OSS not found at $CODE_CLI_INSTALL_DIR; skipping code-cli editor selection."
+        echo "    Re-run with CODE_CLI_INSTALL_DIR=/path/to/installation once Code - OSS is installed."
+    fi
+fi
+
 # Install Oh My Zsh if not present
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
     echo "==> Installing Oh My Zsh..."
