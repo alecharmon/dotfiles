@@ -95,3 +95,5 @@ fzf-file-at() {
 }
 zle -N fzf-file-at
 bindkey '@' fzf-file-at
+# CF CLI completions
+[[ -f "/Users/alec/.config/cf/completions/_cf.zsh" ]] && source "/Users/alec/.config/cf/completions/_cf.zsh"
