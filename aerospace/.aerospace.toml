@@ -228,6 +228,11 @@ run = 'move-node-to-workspace 5'
 if.app-id = 'org.inkscape.Inkscape'
 run = 'layout floating'
 
+# VLC: always floating
+[[on-window-detected]]
+if.app-id = 'org.videolan.vlc'
+run = 'layout floating'
+
 # Hover terminal: float Ghostty windows titled "hover-terminal" on workspace 9
 # (This rule is checked first due to the window-title match, overriding the general Ghostty rule above)
 [[on-window-detected]]
