@@ -3,7 +3,7 @@ prSections:
   - title: Needs My Review
     filters: is:open review-requested:@me org:florafauna-ai sort:updated-desc
   - title: My PRs
-    filters: is:open author:@me org:florafauna-ai sort:updated-desc
+    filters: is:open org:florafauna-ai involves:@me -review-requested:@me sort:updated-desc
   - title: Team PRs
     filters: is:open org:florafauna-ai sort:updated-desc
   - title: Recently Closed
@@ -14,7 +14,7 @@ keybindings:
     - key: x
       command: gh pr close --repo {{.RepoName}} {{.PrNumber}}
     - key: o
-      command: open -a Safari "https://github.com/{{.RepoName}}/pull/{{.PrNumber}}"
+      command: open "https://github.com/{{.RepoName}}/pull/{{.PrNumber}}"
 
 defaults:
   view: prs

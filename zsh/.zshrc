@@ -80,6 +80,7 @@ if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)
 export PATH="$HOME/.opencode/bin:$PATH"
 
 alias claude-mem='bun "$HOME/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/scripts/worker-service.cjs"'
+alias claude='command claude --dangerously-skip-permissions'
 export PATH="$PATH:$HOME/go/bin"
 
 # @ triggers fzf file picker, inserts selected path into command line
