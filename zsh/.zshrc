@@ -34,7 +34,7 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 # pnpm end
-eval "$(/opt/homebrew/bin/mise activate zsh)"
+command -v mise >/dev/null 2>&1 && eval "$(mise activate zsh)"
 
 ### ALIASES
 alias dc="docker compose"
@@ -61,7 +61,7 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
 
 # worktrunk shell integration
-eval "$(wt config shell init zsh)"
+command -v wt >/dev/null 2>&1 && eval "$(wt config shell init zsh)"
 
 # Local overrides and secrets (not tracked in git)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
