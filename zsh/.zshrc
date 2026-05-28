@@ -7,6 +7,12 @@ ZSH_THEME="agnoster"
 plugins=(git zsh-fzf-history-search)
 source $ZSH/oh-my-zsh.sh
 
+# Auto-start tmux on interactive SSH logins (attach "main", else create it).
+# Skips when already inside tmux to avoid nesting.
+if [[ -o interactive ]] && [[ -n "$SSH_CONNECTION" ]] && [[ -z "$TMUX" ]] && command -v tmux >/dev/null 2>&1; then
+  tmux attach -t main 2>/dev/null || tmux new-session -s main
+fi
+
 # Show only current directory name in prompt (not full path)
 PROMPT="${PROMPT//%~/%1~}"
 
