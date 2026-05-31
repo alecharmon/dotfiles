@@ -8,6 +8,11 @@
 
 set -uo pipefail
 
+# Ensure common install locations are on PATH — non-interactive shells (SSH,
+# launchd, etc.) skip ~/.zprofile and ~/.zshrc, so brew + ~/.local/bin tools
+# would otherwise be missing.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 PROJECT_NAME="${1:-$(basename "$HOME")}"
 TMUX_SESSION="claude-remote"
 CAFFEINATE_PID_FILE="$HOME/.claude-remote-caffeinate.pid"

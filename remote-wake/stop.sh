@@ -3,6 +3,8 @@
 
 set -uo pipefail
 
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 TMUX_SESSION="claude-remote"
 CAFFEINATE_PID_FILE="$HOME/.claude-remote-caffeinate.pid"
 
