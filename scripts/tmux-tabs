@@ -31,6 +31,7 @@ import subprocess
 import sys
 from difflib import SequenceMatcher
 from pathlib import Path
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
 from textual.reactive import reactive
@@ -370,19 +371,46 @@ def window_label(win):
     return "\n".join(lines)
 
 
+def action_menu_labels(confirm_kill=False):
+    if confirm_kill:
+        return ["confirm kill", "cancel"]
+    return ["rename", "kill", "clear ready"]
+
+
 class GroupHeader(Label):
     def __init__(self, name):
         super().__init__(name, classes="group")
+
+
+class ActionItem(Label):
+    def __init__(self, win_index, action, app_ref):
+        self.win_index = win_index
+        self.action = action
+        self._app_ref = app_ref
+        super().__init__(f"   {action}", classes="action")
+
+    def on_click(self):
+        self._app_ref.run_window_action(self.win_index, self.action)
 
 
 class WindowItem(Label):
     def __init__(self, win, app_ref):
         self.win_index = win["index"]
         self._app_ref = app_ref
+        self._suppress_click = False
         classes = "window" + (" bell" if win["bell"] else "") + (" active" if win["active"] else "")
         super().__init__(window_label(win), classes=classes, markup=True)
 
+    def on_mouse_down(self, event: events.MouseDown):
+        if event.button in (2, 3):
+            self._suppress_click = True
+            self._app_ref.open_action_menu(self.win_index)
+            event.stop()
+
     def on_click(self):
+        if self._suppress_click:
+            self._suppress_click = False
+            return
         self._app_ref.switch_to(self.win_index)
 
 
@@ -390,6 +418,8 @@ class TmuxTabs(App):
     DEFAULT_CSS = ""
     BINDINGS = [("q", "quit", "Quit")]
     windows: reactive[list] = reactive([], recompose=True)
+    menu_window: reactive[str] = reactive("", recompose=True)
+    confirm_kill: reactive[bool] = reactive(False, recompose=True)
     _pane_id: str = ""
     _current_window: str = ""
     _fifo_path: str = ""
@@ -415,6 +445,7 @@ class TmuxTabs(App):
     .group {{ margin-top: 2; padding: 0 1; height: 1; width: 100%; background: {bg}; color: {fg}; text-style: bold; }}
     .window {{ margin-bottom: 1; padding: 0 1; height: auto; width: 100%; {normal} }}
     .window .dim {{ color: {fg}; text-style: dim; }}
+    .action {{ padding: 0 1; height: 1; width: 100%; background: {bg}; color: {fg}; text-style: dim; }}
     .bell {{ {bell} }}
     .active {{ {current} }}
     .active .dim {{ color: {fg}; text-style: dim; }}
@@ -424,7 +455,10 @@ class TmuxTabs(App):
         children = []
         for group, windows in grouped_windows(self.windows):
             children.append(GroupHeader(group))
-            children.extend(WindowItem(window, self) for window in windows)
+            for window in windows:
+                children.append(WindowItem(window, self))
+                if self.menu_window == window["index"]:
+                    children.extend(ActionItem(window["index"], action, self) for action in action_menu_labels(self.confirm_kill))
         yield Vertical(*children, id="windows")
 
     def on_mount(self):
@@ -472,6 +506,32 @@ class TmuxTabs(App):
 
     def refresh_windows(self):
         self.windows = tmux_windows()
+
+    def open_action_menu(self, win_index):
+        if self.menu_window == win_index and not self.confirm_kill:
+            self.menu_window = ""
+            return
+        self.menu_window = win_index
+        self.confirm_kill = False
+
+    def run_window_action(self, win_index, action):
+        if action == "rename":
+            current = next((w["name"] for w in self.windows if w["index"] == win_index), "")
+            tmux("command-prompt", "-I", current, "-p", "Rename window:", f"rename-window -t {win_index} '%%'")
+            self.menu_window = ""
+        elif action == "kill":
+            self.confirm_kill = True
+        elif action == "confirm kill":
+            tmux("kill-window", "-t", win_index)
+            self.menu_window = ""
+            self.refresh_windows()
+        elif action == "clear ready":
+            clear_ready_panes(next((w.get("panes", []) for w in self.windows if w["index"] == win_index), []))
+            self.menu_window = ""
+            self.refresh_windows()
+        elif action == "cancel":
+            self.menu_window = ""
+            self.confirm_kill = False
 
     def schedule_description_refresh(self):
         if self._description_refresh_running:
