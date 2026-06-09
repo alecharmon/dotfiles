@@ -241,7 +241,7 @@ def write_description(win_index, captured_text, description):
         "window": win_index,
         "signature": content_signature(captured_text),
         "sample": normalize_capture(captured_text)[-4000:],
-        "description": description.strip().splitlines()[0][:120],
+        "description": description.strip().splitlines()[0][:200],
     }
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
@@ -266,7 +266,7 @@ def clean_description_output(output):
         line = line.strip()
         if not line or line.startswith("\x1b") or line.startswith("╭") or line.startswith("│") or line.startswith("╰"):
             continue
-        return line[:120]
+        return line[:200]
     return ""
 
 
@@ -344,14 +344,25 @@ def toggle_sidebar():
 ICON_READY = "🔔 "   # emoji is two cells in most terminals
 ICON_EMPTY = "   "
 DETAIL_INDENT = "   "
-DESCRIPTION_MAX = 42
+DESCRIPTION_CACHE_MAX = 200
+DESCRIPTION_MIN = 8
 
 
-def clipped_description(description):
-    description = description.strip()
-    if len(description) <= DESCRIPTION_MAX:
-        return description
-    return description[:DESCRIPTION_MAX - 1].rstrip() + "…"
+def description_max_for_width(width):
+    # Account for CSS horizontal padding and detail indentation.
+    return max(DESCRIPTION_MIN, int(width) - len(DETAIL_INDENT) - 2)
+
+
+def clipped_text(text, width=None):
+    text = text.strip()
+    max_len = DESCRIPTION_CACHE_MAX if width is None else description_max_for_width(width)
+    if len(text) <= max_len:
+        return text
+    return text[:max_len - 1].rstrip() + "…"
+
+
+def clipped_description(description, width=None):
+    return clipped_text(description, width)
 
 
 def window_icon(win):
@@ -360,9 +371,9 @@ def window_icon(win):
     return ICON_EMPTY
 
 
-def window_label(win):
-    title = win.get("title", "").lstrip("✳").strip()
-    description = clipped_description(win.get("description", ""))
+def window_label(win, width=None):
+    title = clipped_text(win.get("title", "").lstrip("✳"), width)
+    description = clipped_description(win.get("description", ""), width)
     lines = [f"{window_icon(win)}[b]{win['name']}[/b]"]
     if title:
         lines.append(f"{DETAIL_INDENT}[dim]{title}[/dim]")
@@ -394,12 +405,12 @@ class ActionItem(Label):
 
 
 class WindowItem(Label):
-    def __init__(self, win, app_ref):
+    def __init__(self, win, app_ref, width=None):
         self.win_index = win["index"]
         self._app_ref = app_ref
         self._suppress_click = False
         classes = "window" + (" bell" if win["bell"] else "") + (" active" if win["active"] else "")
-        super().__init__(window_label(win), classes=classes, markup=True)
+        super().__init__(window_label(win, width), classes=classes, markup=True)
 
     def on_mouse_down(self, event: events.MouseDown):
         if event.button in (2, 3):
@@ -420,6 +431,7 @@ class TmuxTabs(App):
     windows: reactive[list] = reactive([], recompose=True)
     menu_window: reactive[str] = reactive("", recompose=True)
     confirm_kill: reactive[bool] = reactive(False, recompose=True)
+    sidebar_width_cells: reactive[int] = reactive(DESCRIPTION_CACHE_MAX + len(DETAIL_INDENT) + 2, recompose=True)
     _pane_id: str = ""
     _current_window: str = ""
     _fifo_path: str = ""
@@ -443,8 +455,8 @@ class TmuxTabs(App):
     Screen {{ background: {bg}; color: {fg}; layers: base; }}
     #windows {{ height: 1fr; padding-top: 1; overflow-y: auto; background: {bg}; align: left top; }}
     .group {{ margin-top: 2; padding: 0 1; height: 1; width: 100%; background: {bg}; color: {fg}; text-style: bold; }}
-    .window {{ margin-bottom: 1; padding: 0 1; height: auto; width: 100%; {normal} }}
-    .window .dim {{ color: {fg}; text-style: dim; }}
+    .window {{ margin-bottom: 1; padding: 0 1; height: auto; width: 100%; text-wrap: nowrap; text-overflow: ellipsis; {normal} }}
+    .window .dim {{ color: {fg}; text-style: dim; text-wrap: nowrap; text-overflow: ellipsis; }}
     .action {{ padding: 0 1; height: 1; width: 100%; background: {bg}; color: {fg}; text-style: dim; }}
     .bell {{ {bell} }}
     .active {{ {current} }}
@@ -456,7 +468,7 @@ class TmuxTabs(App):
         for group, windows in grouped_windows(self.windows):
             children.append(GroupHeader(group))
             for window in windows:
-                children.append(WindowItem(window, self))
+                children.append(WindowItem(window, self, self.sidebar_width_cells))
                 if self.menu_window == window["index"]:
                     children.extend(ActionItem(window["index"], action, self) for action in action_menu_labels(self.confirm_kill))
         yield Vertical(*children, id="windows")
@@ -465,6 +477,7 @@ class TmuxTabs(App):
         self._pane_id = os.environ["TMUX_PANE"]
         self._current_window = pane_var(self._pane_id, "#{window_index}")
         tmux("select-pane", "-t", self._pane_id, "-T", "tmux-tabs")
+        self.update_sidebar_width()
         self.windows = tmux_windows()
         self._setup_fifo()
         self.set_timer(1.0, self.schedule_description_refresh)
@@ -504,7 +517,14 @@ class TmuxTabs(App):
             if target:
                 self.switch_to(target)
 
+    def update_sidebar_width(self):
+        try:
+            self.sidebar_width_cells = int(pane_var(self._pane_id, "#{pane_width}"))
+        except Exception:
+            pass
+
     def refresh_windows(self):
+        self.update_sidebar_width()
         self.windows = tmux_windows()
 
     def open_action_menu(self, win_index):
@@ -562,6 +582,10 @@ class TmuxTabs(App):
 
     def switch_to(self, win_index):
         # Move the sidebar to the left edge of the target window and keep it visible.
+        actual_current_window = tmux("display-message", "-p", "#{window_index}")
+        if win_index == actual_current_window:
+            self._current_window = actual_current_window
+            return
         target_pane = leftmost_active_pane(win_index)
         focus_pane = active_pane(win_index)
         target_width = int(pane_var(target_pane, "#{window_width}"))
