@@ -230,11 +230,8 @@ class TmuxTabs(App):
     .group {{ padding: 0 1; height: 1; width: 100%; background: {bg}; color: {fg}; text-style: bold; }}
     .window {{ padding: 0 1; height: 2; width: 100%; {normal} }}
     .window .dim {{ color: {fg}; text-style: dim; }}
-    .window:hover {{ background: {fg}; color: {bg}; }}
     .bell {{ {bell} }}
-    .bell:hover {{ {bell} text-style: bold reverse; }}
     .active {{ {current} }}
-    .active:hover {{ {current} }}
     """
 
     def compose(self) -> ComposeResult:
