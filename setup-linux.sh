@@ -19,9 +19,9 @@ if ! command -v apt-get &>/dev/null; then
 fi
 
 # Install core tools
-echo "==> Installing core packages (zsh, fzf, fd, python pip)..."
+echo "==> Installing core packages (zsh, fzf, fd, python pip, go)..."
 $SUDO apt-get update -qq
-$SUDO apt-get install -y zsh fzf fd-find python3-pip
+$SUDO apt-get install -y zsh fzf fd-find python3-pip golang-go
 
 ensure_python_textual() {
     if python3 -c 'import textual' >/dev/null 2>&1; then
@@ -33,6 +33,21 @@ ensure_python_textual() {
         python3 -m pip install --user --break-system-packages textual
 }
 ensure_python_textual
+
+ensure_llm_redactor() {
+    if command -v llm-redactor-exec &>/dev/null; then
+        return 0
+    fi
+    if ! command -v go &>/dev/null; then
+        echo "==> WARNING: go not found; skipping llm-redactor-exec install for tmux-tabs descriptions."
+        return 0
+    fi
+
+    echo "==> Installing llm-redactor-exec for tmux-tabs descriptions..."
+    go install github.com/wangyihang/llm-redactor/cmd/llm-redactor-exec@latest || \
+        echo "==> WARNING: failed to install llm-redactor-exec; tmux-tabs descriptions will be disabled."
+}
+ensure_llm_redactor
 
 # Debian/Ubuntu ship fd as 'fdfind'; the configs call 'fd'. Bridge it.
 mkdir -p "$HOME/.local/bin"

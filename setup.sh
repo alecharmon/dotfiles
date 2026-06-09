@@ -27,6 +27,21 @@ ensure_python_textual() {
 }
 ensure_python_textual
 
+ensure_llm_redactor() {
+    if command -v llm-redactor-exec &>/dev/null; then
+        return 0
+    fi
+    if ! command -v go &>/dev/null; then
+        echo "==> WARNING: go not found; skipping llm-redactor-exec install for tmux-tabs descriptions."
+        return 0
+    fi
+
+    echo "==> Installing llm-redactor-exec for tmux-tabs descriptions..."
+    go install github.com/wangyihang/llm-redactor/cmd/llm-redactor-exec@latest || \
+        echo "==> WARNING: failed to install llm-redactor-exec; tmux-tabs descriptions will be disabled."
+}
+ensure_llm_redactor
+
 # Configure VS Code CLI standalone to use Code - OSS when available.
 # Override CODE_CLI_INSTALL_DIR if Code - OSS is installed outside /Applications.
 CODE_CLI_INSTALL_DIR="${CODE_CLI_INSTALL_DIR:-/Applications/Code - OSS.app}"

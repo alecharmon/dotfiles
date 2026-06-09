@@ -5,6 +5,7 @@ tap "FelixKratz/formulae"
 
 # Core tools
 brew "git"
+brew "go"
 brew "fzf"
 brew "gh"
 brew "stow"
