@@ -23,9 +23,11 @@ sidebar matches your current byobu/tmux color scheme automatically.
 """
 
 import asyncio
+import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
 from textual.reactive import reactive
@@ -91,13 +93,61 @@ def active_pane(win_index):
     return tmux("list-panes", "-t", win_index, "-f", "#{pane_active}", "-F", "#{pane_id}")
 
 
+def agent_ready_dir():
+    cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")).expanduser()
+    return cache_home / "dotfiles" / "agent-ready"
+
+
+def pane_ids_by_window():
+    out = tmux("list-panes", "-s", "-F", "#{window_index}|#{pane_id}")
+    panes = {}
+    for line in out.splitlines():
+        win_index, pane_id = line.split("|", 1)
+        panes.setdefault(win_index, []).append(pane_id)
+    return panes
+
+
+def live_pane_ids():
+    return {pane for panes in pane_ids_by_window().values() for pane in panes}
+
+
+def ready_panes(live_panes=None):
+    live_panes = live_panes or live_pane_ids()
+    root = agent_ready_dir()
+    if not root.exists():
+        return set()
+    ready = set()
+    for marker in root.glob("*.json"):
+        try:
+            data = json.loads(marker.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        pane = data.get("pane")
+        if pane in live_panes:
+            ready.add(pane)
+        elif pane:
+            marker.unlink(missing_ok=True)
+    return ready
+
+
+def ready_window_indexes(window_panes, ready):
+    return {win_index for win_index, panes in window_panes.items() if any(pane in ready for pane in panes)}
+
+
+def clear_ready_panes(panes):
+    for pane in panes:
+        (agent_ready_dir() / f"{pane.lstrip('%')}.json").unlink(missing_ok=True)
+
+
 def tmux_windows():
+    window_panes = pane_ids_by_window()
+    ready_windows = ready_window_indexes(window_panes, ready_panes({pane for panes in window_panes.values() for pane in panes}))
     out = tmux("list-windows", "-F",
                "#{window_index}|#{window_name}|#{window_bell_flag}|#{window_flags}|#{pane_title}|#{pane_current_path}")
     return [
-        {"index": idx, "name": name, "bell": bell == "1",
+        {"index": idx, "name": name, "bell": bell == "1", "ready": bell == "1" or idx in ready_windows,
          "active": "*" in flags, "last": "-" in flags, "title": title,
-         "path": path, "group": project_group(path)}
+         "path": path, "group": project_group(path), "panes": window_panes.get(idx, [])}
         for line in out.splitlines()
         for idx, name, bell, flags, title, path in [line.split("|", 5)]
     ]
@@ -147,7 +197,7 @@ class WindowItem(Label):
     def __init__(self, win, app_ref):
         self.win_index = win["index"]
         self._app_ref = app_ref
-        icon = "🔔" if win["bell"] else ("▶" if win["active"] else " ")
+        icon = "🔔" if win.get("ready") else ("▶" if win["active"] else " ")
         title = win["title"].lstrip("✳").strip()
         label = f"{icon} [b]{win['name']}[/b]\n    [dim]{title}[/dim]" if title else f"{icon} [b]{win['name']}[/b]"
         classes = "window" + (" bell" if win["bell"] else "") + (" active" if win["active"] else "")
@@ -247,6 +297,7 @@ class TmuxTabs(App):
         tmux("move-pane", "-h", "-l", str(width), "-s", self._pane_id, "-t", target_pane, "-d", "-b")
         tmux("select-window", "-t", win_index)
         tmux("select-pane", "-t", focus_pane)
+        clear_ready_panes(next((w.get("panes", []) for w in self.windows if w["index"] == win_index), []))
         self._current_window = win_index
 
 
