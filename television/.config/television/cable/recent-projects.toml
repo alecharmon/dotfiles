@@ -1,0 +1,29 @@
+[metadata]
+name = "recent-projects"
+description = "Recently committed git repositories under ~/dev"
+requirements = ["git", "find"]
+
+[source]
+command = "~/.config/television/scripts/recent-projects.zsh list"
+display = "{split:\t:1}"
+output = "{split:\t:0}"
+no_sort = true
+
+[preview]
+command = "~/.config/television/scripts/recent-projects.zsh preview '{split:\t:0}'"
+header = "{split:\t:1} — {split:\t:0}"
+
+[actions.cd]
+description = "Open a shell in this repo"
+command = "zsh -lc 'cd \"{split:\t:0}\" && exec ${SHELL:-zsh} -l'"
+mode = "execute"
+
+[actions.code]
+description = "Open repo in VS Code"
+command = "code '{split:\t:0}'"
+mode = "fork"
+
+[actions.claude]
+description = "Open Claude in this repo"
+command = "zsh -lc 'cd \"{split:\t:0}\" && command claude --dangerously-skip-permissions'"
+mode = "execute"

@@ -83,6 +83,14 @@ alias claude-mem='bun "$HOME/.claude/plugins/cache/thedotmack/claude-mem/10.5.5/
 alias claude='command claude --dangerously-skip-permissions'
 export PATH="$PATH:$HOME/go/bin"
 
+# Recent git projects under ~/dev via Television; selection cd's in this shell.
+rp() {
+  local selected
+  selected="$(tv recent-projects --no-sort)" || return
+  [[ -n "$selected" ]] || return
+  cd "$selected"
+}
+
 # @ triggers fzf file picker, inserts selected path into command line
 # Cancel fzf (Esc/Ctrl-C) to insert a literal @
 fzf-file-at() {
