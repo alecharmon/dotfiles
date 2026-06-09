@@ -16,6 +16,17 @@ fi
 echo "==> Installing packages from Brewfile..."
 brew bundle --file="$DOTFILES_DIR/Brewfile"
 
+ensure_python_textual() {
+    if python3 -c 'import textual' >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "==> Installing Python Textual for tmux-tabs..."
+    python3 -m pip install --user textual || \
+        python3 -m pip install --user --break-system-packages textual
+}
+ensure_python_textual
+
 # Configure VS Code CLI standalone to use Code - OSS when available.
 # Override CODE_CLI_INSTALL_DIR if Code - OSS is installed outside /Applications.
 CODE_CLI_INSTALL_DIR="${CODE_CLI_INSTALL_DIR:-/Applications/Code - OSS.app}"

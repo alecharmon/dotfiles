@@ -19,9 +19,20 @@ if ! command -v apt-get &>/dev/null; then
 fi
 
 # Install core tools
-echo "==> Installing core packages (zsh, fzf, fd)..."
+echo "==> Installing core packages (zsh, fzf, fd, python pip)..."
 $SUDO apt-get update -qq
-$SUDO apt-get install -y zsh fzf fd-find
+$SUDO apt-get install -y zsh fzf fd-find python3-pip
+
+ensure_python_textual() {
+    if python3 -c 'import textual' >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "==> Installing Python Textual for tmux-tabs..."
+    python3 -m pip install --user textual || \
+        python3 -m pip install --user --break-system-packages textual
+}
+ensure_python_textual
 
 # Debian/Ubuntu ship fd as 'fdfind'; the configs call 'fd'. Bridge it.
 mkdir -p "$HOME/.local/bin"
