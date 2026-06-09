@@ -3,3 +3,8 @@
 # Local Infisical project config
 .infisical.json
 @.infisical.json
+
+# Local shell overrides and secrets
+.zshrc.local
+.zshrc.secrets
+*.secrets.zsh

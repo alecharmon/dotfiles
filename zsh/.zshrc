@@ -69,8 +69,10 @@ export PATH="$HOME/.antigravity/antigravity/bin:$PATH"
 # worktrunk shell integration
 command -v wt >/dev/null 2>&1 && eval "$(wt config shell init zsh)"
 
-# Local overrides and secrets (not tracked in git)
+# Local overrides (not tracked in git)
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+# Machine-local secrets and environment variables (not tracked in git)
+[ -f "$HOME/.zshrc.secrets" ] && source "$HOME/.zshrc.secrets"
 export PATH="$HOME/.local/bin:$PATH"
 
 
