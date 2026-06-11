@@ -198,6 +198,16 @@ on-mode-changed = []
     alt-shift-l = ['join-with right', 'mode main']
 
 # Default app-to-workspace assignments
+# Chrome browser windows belong on workspace 7. Do not use --focus-follows-window:
+# newly opened browser windows should not steal focus from the current workspace.
+[[on-window-detected]]
+if.app-id = 'com.google.Chrome'
+run = 'move-node-to-workspace 7'
+
+[[on-window-detected]]
+if.app-id = 'com.google.ChromeForTesting'
+run = 'move-node-to-workspace 7'
+
 [[on-window-detected]]
 if.app-id = 'com.mitchellh.ghostty'
 if.during-aerospace-startup = true

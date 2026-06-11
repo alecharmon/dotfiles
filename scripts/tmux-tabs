@@ -77,6 +77,54 @@ def grouped_windows(windows):
     return [(name, groups[name]) for name in ordered_names]
 
 
+def sidebar_window_order(windows):
+    return [window["index"] for _group, group_windows in grouped_windows(windows) for window in group_windows]
+
+
+def adjacent_sidebar_window(windows, current, direction):
+    order = sidebar_window_order(windows)
+    if not order:
+        return ""
+    if current not in order:
+        return order[0]
+    offset = -1 if direction == "prev" else 1
+    return order[(order.index(current) + offset) % len(order)]
+
+
+def sidebar_pane_id():
+    current_session = tmux("display-message", "-p", "#{session_id}")
+    out = tmux("list-panes", "-a", "-F", "#{session_id}|#{pane_id}|#{pane_title}")
+    for line in out.splitlines():
+        session_id, pane_id, pane_title = line.split("|", 2)
+        if session_id == current_session and pane_title == "tmux-tabs":
+            return pane_id
+    return ""
+
+
+def move_sidebar_to_window(sidebar_pane, win_index, windows):
+    if not sidebar_pane:
+        return
+    target_pane = leftmost_active_pane(win_index)
+    focus_pane = active_pane(win_index)
+    target_width = int(pane_var(target_pane, "#{window_width}"))
+    width = sidebar_width(windows, target_width)
+    tmux("move-pane", "-h", "-l", str(width), "-s", sidebar_pane, "-t", target_pane, "-d", "-b")
+    tmux("select-window", "-t", win_index)
+    tmux("select-pane", "-t", focus_pane)
+
+
+def select_adjacent_sidebar_window(direction):
+    windows = tmux_windows()
+    current = tmux("display-message", "-p", "#{window_index}")
+    target = adjacent_sidebar_window(windows, current, direction)
+    if target and target != current:
+        sidebar = sidebar_pane_id()
+        if sidebar:
+            move_sidebar_to_window(sidebar, target, windows)
+        else:
+            tmux("select-window", "-t", target)
+
+
 def sidebar_width(windows, window_width):
     content_width = 18
     for group, group_windows in grouped_windows(windows):
@@ -586,13 +634,7 @@ class TmuxTabs(App):
         if win_index == actual_current_window:
             self._current_window = actual_current_window
             return
-        target_pane = leftmost_active_pane(win_index)
-        focus_pane = active_pane(win_index)
-        target_width = int(pane_var(target_pane, "#{window_width}"))
-        width = sidebar_width(self.windows, target_width)
-        tmux("move-pane", "-h", "-l", str(width), "-s", self._pane_id, "-t", target_pane, "-d", "-b")
-        tmux("select-window", "-t", win_index)
-        tmux("select-pane", "-t", focus_pane)
+        move_sidebar_to_window(self._pane_id, win_index, self.windows)
         clear_ready_panes(next((w.get("panes", []) for w in self.windows if w["index"] == win_index), []))
         self._current_window = win_index
 
@@ -602,5 +644,8 @@ if __name__ == "__main__":
         os.environ.setdefault("TEXTUAL_THEME", "")
         TmuxTabs.CSS = TmuxTabs.build_css()
         TmuxTabs().run(inline=False)
+    elif "--select" in sys.argv:
+        direction = sys.argv[sys.argv.index("--select") + 1]
+        select_adjacent_sidebar_window(direction)
     else:
         toggle_sidebar()

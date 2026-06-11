@@ -27,10 +27,13 @@ command = /opt/homebrew/bin/tmux new-session
 
 keybind = super+enter=unbind
 
-# Send private escape sequences for tmux Hyper-[ / Hyper-], Hyper-z / Hyper-x, Hyper-1, and Hyper-2
+# Send private escape sequences for tmux Hyper-[ / Hyper-], Hyper-z / Hyper-x,
+# Hyper-1 / Hyper-2, and Hyper-Up / Hyper-Down
 keybind = super+ctrl+alt+shift+[=text:\x1b[5;30012~
 keybind = super+ctrl+alt+shift+]=text:\x1b[5;30013~
 keybind = super+ctrl+alt+shift+z=text:\x1b[5;30014~
 keybind = super+ctrl+alt+shift+x=text:\x1b[5;30015~
 keybind = super+ctrl+alt+shift+1=text:\x1b[5;30016~
 keybind = super+ctrl+alt+shift+2=text:\x1b[5;30017~
+keybind = super+ctrl+alt+shift+up=text:\x1b[5;30018~
+keybind = super+ctrl+alt+shift+down=text:\x1b[5;30019~
