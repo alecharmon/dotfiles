@@ -16,16 +16,15 @@ fi
 echo "==> Installing packages from Brewfile..."
 brew bundle --file="$DOTFILES_DIR/Brewfile"
 
-ensure_python_textual() {
-    if python3 -c 'import textual' >/dev/null 2>&1; then
+build_tmux_tabs() {
+    if ! command -v cargo >/dev/null 2>&1; then
+        echo "==> WARNING: cargo not found; skipping tmux-tabs build. Install Rust (https://rustup.rs)." >&2
         return 0
     fi
-
-    echo "==> Installing Python Textual for tmux-tabs..."
-    python3 -m pip install --user textual || \
-        python3 -m pip install --user --break-system-packages textual
+    echo "==> Building tmux-tabs (Rust sidebar)..."
+    cargo build --release --manifest-path "$DOTFILES_DIR/tmux-tabs/Cargo.toml"
 }
-ensure_python_textual
+build_tmux_tabs
 
 ensure_llm_redactor() {
     if command -v llm-redactor-exec &>/dev/null; then
