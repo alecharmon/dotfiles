@@ -5,7 +5,8 @@ use tmux_tabs::app::{handle_event, Action, Event, State};
 use tmux_tabs::layout::{build_lines, LineStyle, Target};
 use tmux_tabs::model::{
     adjacent_sidebar_window, clipped_text, grouped_windows, project_group, sidebar_width,
-    sidebar_window_order, window_display_name, Direction, Window,
+    sidebar_width_with_config, sidebar_window_order, window_display_name, Direction,
+    SidebarWidthConfig, Window,
 };
 
 const HOME: &str = "/home/alec";
@@ -73,6 +74,33 @@ fn width_grows_with_content_and_is_capped() {
 
     // host width caps the result: 40/4 = 10 -> floored to 18.
     assert_eq!(sidebar_width(&narrow, 40), 18);
+}
+
+#[test]
+fn descriptions_do_not_expand_sidebar_width() {
+    let mut described = win("1", "g", "short");
+    described.description = "this is a very long generated description that should be clipped, not widen the sidebar".to_string();
+
+    assert_eq!(sidebar_width(&[described], 400), 18);
+}
+
+#[test]
+fn sidebar_width_honors_configured_min_and_max() {
+    let narrow = vec![win("1", "g", "short")];
+    let cfg = SidebarWidthConfig { min: 24, max: 60 };
+    assert_eq!(sidebar_width_with_config(&narrow, 400, cfg), 24);
+
+    let mut wide = win("1", "g", "a-really-quite-long-window-name-here");
+    wide.title = "and an even longer descriptive title goes here too".to_string();
+    let cfg = SidebarWidthConfig { min: 24, max: 32 };
+    assert_eq!(sidebar_width_with_config(&[wide], 400, cfg), 32);
+}
+
+#[test]
+fn sidebar_width_treats_max_below_min_as_min() {
+    let narrow = vec![win("1", "g", "short")];
+    let cfg = SidebarWidthConfig { min: 30, max: 20 };
+    assert_eq!(sidebar_width_with_config(&narrow, 400, cfg), 30);
 }
 
 #[test]

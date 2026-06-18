@@ -28,6 +28,18 @@ Colours are read live from the tmux theme (`window-status-style`, etc.) so the
 sidebar matches your current scheme. The sidebar follows focus automatically
 when you switch or open windows.
 
+## Width
+
+The sidebar grows to fit content, then clamps to a min/max width. Defaults are
+18 and 48 cells. Override them in tmux config:
+
+```tmux
+set -g @tmux-tabs-min-width 24
+set -g @tmux-tabs-max-width 60
+```
+
+Missing or invalid values fall back to defaults. If max is below min, min wins.
+
 ## Build
 
 ```

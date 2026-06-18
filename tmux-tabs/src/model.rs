@@ -28,6 +28,22 @@ pub const DETAIL_INDENT: &str = "   ";
 pub const DESCRIPTION_CACHE_MAX: usize = 200;
 pub const DESCRIPTION_MIN: usize = 8;
 pub const MIN_WIDTH: usize = 18;
+pub const MAX_WIDTH: usize = 48;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SidebarWidthConfig {
+    pub min: usize,
+    pub max: usize,
+}
+
+impl Default for SidebarWidthConfig {
+    fn default() -> Self {
+        Self {
+            min: MIN_WIDTH,
+            max: MAX_WIDTH,
+        }
+    }
+}
 
 /// Lexically normalise a path: expand a leading `~`, make it absolute relative
 /// to `cwd`, and collapse `.`/`..` components without touching the filesystem
@@ -165,7 +181,18 @@ fn strip_star(title: &str) -> String {
 /// Compute the desired sidebar width in cells for the given windows and host
 /// window width (mirrors `sidebar_width`).
 pub fn sidebar_width(windows: &[Window], window_width: usize) -> usize {
-    let mut content_width = MIN_WIDTH;
+    sidebar_width_with_config(windows, window_width, SidebarWidthConfig::default())
+}
+
+pub fn sidebar_width_with_config(
+    windows: &[Window],
+    window_width: usize,
+    config: SidebarWidthConfig,
+) -> usize {
+    let min_width = config.min.max(1);
+    let configured_max = config.max.max(min_width);
+
+    let mut content_width = min_width;
     for (group, group_windows) in grouped_windows(windows) {
         content_width = content_width.max(char_len(&group) + 2);
         for w in group_windows {
@@ -174,13 +201,10 @@ pub fn sidebar_width(windows: &[Window], window_width: usize) -> usize {
             if !title.is_empty() {
                 content_width = content_width.max(char_len(&title) + 6);
             }
-            if !w.description.is_empty() {
-                content_width = content_width.max(char_len(&w.description) + 6);
-            }
         }
     }
-    let max_width = 48.min((window_width / 4).max(MIN_WIDTH));
-    MIN_WIDTH.max(content_width.min(max_width))
+    let max_width = configured_max.min((window_width / 4).max(min_width));
+    min_width.max(content_width.min(max_width))
 }
 
 /// Derive the display name for a window, expanding bare `Python` panes to a
