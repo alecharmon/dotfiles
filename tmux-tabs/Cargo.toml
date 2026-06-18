@@ -18,4 +18,6 @@ unicode-width = "0.1"
 
 [profile.release]
 opt-level = 2
-lto = false
+lto = true
+strip = true
+codegen-units = 1
