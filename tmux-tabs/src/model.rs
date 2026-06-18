@@ -1,0 +1,239 @@
+//! Pure data model and layout logic for the tmux sidebar.
+//!
+//! Everything in this module is free of I/O so it can be exercised directly
+//! from integration tests. The runtime layer (`tmux`, `runtime`) feeds these
+//! functions real data and renders/acts on their output.
+
+use std::path::{Component, Path, PathBuf};
+
+/// A single tmux window as shown in the sidebar.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Window {
+    pub index: String,
+    pub name: String,
+    pub bell: bool,
+    pub ready: bool,
+    pub active: bool,
+    pub last: bool,
+    pub title: String,
+    pub path: String,
+    pub group: String,
+    pub panes: Vec<String>,
+    pub description: String,
+}
+
+pub const ICON_READY: &str = "🔔 ";
+pub const ICON_EMPTY: &str = "   ";
+pub const DETAIL_INDENT: &str = "   ";
+pub const DESCRIPTION_CACHE_MAX: usize = 200;
+pub const DESCRIPTION_MIN: usize = 8;
+pub const MIN_WIDTH: usize = 18;
+
+/// Lexically normalise a path: expand a leading `~`, make it absolute relative
+/// to `cwd`, and collapse `.`/`..` components without touching the filesystem
+/// (the path may not exist).
+pub fn normalize_path(input: &str, home: &str, cwd: &str) -> PathBuf {
+    let expanded: PathBuf = if input == "~" {
+        PathBuf::from(home)
+    } else if let Some(rest) = input.strip_prefix("~/") {
+        Path::new(home).join(rest)
+    } else if input.is_empty() {
+        PathBuf::from(cwd)
+    } else {
+        PathBuf::from(input)
+    };
+
+    let absolute = if expanded.is_absolute() {
+        expanded
+    } else {
+        Path::new(cwd).join(expanded)
+    };
+
+    let mut out = PathBuf::new();
+    for comp in absolute.components() {
+        match comp {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Map a working directory to its project group, mirroring the Python
+/// `project_group`: paths under `~/dev` group by their first component, with
+/// `~/dev/flora/<x>` grouping by `<x>`. `~/dev` itself is `dev`; anything else
+/// is `Other`.
+pub fn project_group(path: &str, home: &str, cwd: &str) -> String {
+    let dev_dir = normalize_path("~/dev", home, cwd);
+    let abs = normalize_path(path, home, cwd);
+
+    let rel = match abs.strip_prefix(&dev_dir) {
+        Ok(rel) => rel,
+        Err(_) => return "Other".to_string(),
+    };
+
+    let parts: Vec<String> = rel
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+
+    if parts.is_empty() {
+        return "dev".to_string();
+    }
+    if parts[0] == "flora" && parts.len() > 1 && !parts[1].is_empty() {
+        return parts[1].clone();
+    }
+    if parts[0].is_empty() {
+        return "Other".to_string();
+    }
+    parts[0].clone()
+}
+
+/// Group windows by their `group`, ordering group names case-insensitively
+/// with `Other` always last (mirrors `grouped_windows`).
+pub fn grouped_windows(windows: &[Window]) -> Vec<(String, Vec<&Window>)> {
+    let mut order: Vec<String> = Vec::new();
+    let mut groups: std::collections::HashMap<String, Vec<&Window>> = std::collections::HashMap::new();
+    for w in windows {
+        if !groups.contains_key(&w.group) {
+            order.push(w.group.clone());
+        }
+        groups.entry(w.group.clone()).or_default().push(w);
+    }
+
+    let mut names: Vec<String> = order.iter().filter(|n| *n != "Other").cloned().collect();
+    names.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    if groups.contains_key("Other") {
+        names.push("Other".to_string());
+    }
+
+    names
+        .into_iter()
+        .map(|name| {
+            let ws = groups.remove(&name).unwrap_or_default();
+            (name, ws)
+        })
+        .collect()
+}
+
+/// The window indexes in sidebar (grouped) order.
+pub fn sidebar_window_order(windows: &[Window]) -> Vec<String> {
+    grouped_windows(windows)
+        .into_iter()
+        .flat_map(|(_, ws)| ws.into_iter().map(|w| w.index.clone()))
+        .collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Prev,
+    Next,
+}
+
+/// The window index adjacent to `current` in sidebar order, wrapping around.
+pub fn adjacent_sidebar_window(windows: &[Window], current: &str, dir: Direction) -> String {
+    let order = sidebar_window_order(windows);
+    if order.is_empty() {
+        return String::new();
+    }
+    let idx = match order.iter().position(|i| i == current) {
+        Some(i) => i,
+        None => return order[0].clone(),
+    };
+    let len = order.len();
+    let next = match dir {
+        Direction::Prev => (idx + len - 1) % len,
+        Direction::Next => (idx + 1) % len,
+    };
+    order[next].clone()
+}
+
+fn char_len(s: &str) -> usize {
+    s.chars().count()
+}
+
+fn strip_star(title: &str) -> String {
+    title.trim_start_matches('✳').trim().to_string()
+}
+
+/// Compute the desired sidebar width in cells for the given windows and host
+/// window width (mirrors `sidebar_width`).
+pub fn sidebar_width(windows: &[Window], window_width: usize) -> usize {
+    let mut content_width = MIN_WIDTH;
+    for (group, group_windows) in grouped_windows(windows) {
+        content_width = content_width.max(char_len(&group) + 2);
+        for w in group_windows {
+            content_width = content_width.max(char_len(&w.name) + 4);
+            let title = strip_star(&w.title);
+            if !title.is_empty() {
+                content_width = content_width.max(char_len(&title) + 6);
+            }
+            if !w.description.is_empty() {
+                content_width = content_width.max(char_len(&w.description) + 6);
+            }
+        }
+    }
+    let max_width = 48.min((window_width / 4).max(MIN_WIDTH));
+    MIN_WIDTH.max(content_width.min(max_width))
+}
+
+/// Derive the display name for a window, expanding bare `Python` panes to a
+/// `path:command` form (mirrors `window_display_name`).
+pub fn window_display_name(tmux_name: &str, command: &str, path: &str) -> String {
+    if command == "Python" || tmux_name.ends_with(":Python") {
+        let base = Path::new(path)
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| tmux_name.split(':').next().unwrap_or(tmux_name).to_string());
+        let cmd = command.trim();
+        let cmd = if cmd.is_empty() { "pane" } else { cmd };
+        return format!("{base}:{cmd}");
+    }
+    tmux_name.to_string()
+}
+
+fn description_max_for_width(width: usize) -> usize {
+    DESCRIPTION_MIN.max(width.saturating_sub(char_len(DETAIL_INDENT) + 2))
+}
+
+/// Clip text to fit either the description cache cap (`width == None`) or the
+/// sidebar width, appending an ellipsis when truncated.
+pub fn clipped_text(text: &str, width: Option<usize>) -> String {
+    let text = text.trim();
+    let max_len = match width {
+        None => DESCRIPTION_CACHE_MAX,
+        Some(w) => description_max_for_width(w),
+    };
+    if char_len(text) <= max_len {
+        return text.to_string();
+    }
+    if max_len == 0 {
+        return "…".to_string();
+    }
+    let kept: String = text.chars().take(max_len - 1).collect();
+    format!("{}…", kept.trim_end())
+}
+
+pub fn window_icon(w: &Window) -> &'static str {
+    if w.ready {
+        ICON_READY
+    } else {
+        ICON_EMPTY
+    }
+}
+
+/// Action menu labels for a window (mirrors `action_menu_labels`).
+pub fn action_menu_labels(confirm_kill: bool) -> Vec<&'static str> {
+    if confirm_kill {
+        vec!["confirm kill", "cancel"]
+    } else {
+        vec!["rename", "kill", "clear ready"]
+    }
+}
