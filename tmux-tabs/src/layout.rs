@@ -11,6 +11,7 @@ use crate::model::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     SwitchTo(String),
+    OpenPr(String),
     RunAction { index: String, action: String },
 }
 
@@ -91,10 +92,15 @@ pub fn build_lines(
             }
             if let Some(pr) = &win.pr {
                 let suffix = if pr.draft { " draft" } else { "" };
+                let pr_target = if pr.url.is_empty() {
+                    target.clone()
+                } else {
+                    Target::OpenPr(win.index.clone())
+                };
                 lines.push(VisualLine {
                     text: format!("{DETAIL_INDENT}PR #{}{suffix}", pr.number),
                     style: LineStyle::Detail { active, bell },
-                    target: Some(target.clone()),
+                    target: Some(pr_target),
                 });
             }
 

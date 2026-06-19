@@ -143,6 +143,9 @@ pub fn handle_event(state: &mut State, event: Event) -> Vec<Action> {
                     state.current_window = index.clone();
                     out.push(Action::SwitchTo(index));
                 }
+                Some(Target::OpenPr(index)) => {
+                    out.push(Action::OpenPr(index));
+                }
                 Some(Target::RunAction { index, action }) => {
                     state.run_window_action(&index, &action, &mut out);
                 }

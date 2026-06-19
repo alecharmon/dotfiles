@@ -320,6 +320,44 @@ fn layout_marks_draft_pr_detail_line() {
 }
 
 #[test]
+fn clicking_pr_detail_line_opens_pr() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+    });
+
+    let row = s
+        .lines()
+        .iter()
+        .position(|l| l.text == "   PR #42")
+        .unwrap() as u16;
+
+    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::OpenPr("1".into())]);
+}
+
+#[test]
+fn clicking_pr_detail_without_url_switches_window() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: String::new(),
+        draft: false,
+    });
+
+    let row = s
+        .lines()
+        .iter()
+        .position(|l| l.text == "   PR #42")
+        .unwrap() as u16;
+
+    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::SwitchTo("1".into())]);
+}
+
+#[test]
 fn action_menu_pr_items_emit_actions() {
     let mut s = three_window_state();
     s.windows[0].pr = Some(PullRequestStatus {
