@@ -4,8 +4,11 @@
 //! `app`, and renders the visual lines produced by `layout`.
 
 use std::io::{self, Stdout};
+use std::path::PathBuf;
+use std::process::Command;
 use std::time::{Duration, Instant};
 
+use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event as CtEvent, KeyCode, MouseButton,
     MouseEventKind,
@@ -19,14 +22,15 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::{Terminal, TerminalOptions, Viewport};
-use ratatui::backend::CrosstermBackend;
 use unicode_width::UnicodeWidthStr;
 
 use crate::app::{handle_event, Action, Event, State};
 use crate::control::move_sidebar_to_window;
 use crate::layout::LineStyle;
 use crate::theme::{load_theme, Theme};
-use crate::tmux::{clear_ready_panes, display, pane_var, tmux_windows, Ctx, RealTmux, Tmux};
+use crate::tmux::{
+    active_pane, clear_ready_panes, display, pane_var, tmux_windows, Ctx, RealTmux, Tmux,
+};
 
 const TICK: Duration = Duration::from_millis(200);
 const REFRESH: Duration = Duration::from_secs(1);
@@ -48,7 +52,13 @@ impl Runtime {
         let theme = load_theme(&t);
         let mut state = State::default();
         state.current_window = pane_var(&t, &pane_id, "#{window_index}");
-        Ok(Runtime { t, ctx, state, theme, pane_id })
+        Ok(Runtime {
+            t,
+            ctx,
+            state,
+            theme,
+            pane_id,
+        })
     }
 
     fn refresh_size(&mut self, term: &Term) {
@@ -71,6 +81,57 @@ impl Runtime {
             .find(|w| w.index == index)
             .map(|w| w.panes.clone())
             .unwrap_or_default()
+    }
+
+    fn window_path(&self, index: &str) -> String {
+        self.state
+            .windows
+            .iter()
+            .find(|w| w.index == index)
+            .map(|w| w.path.clone())
+            .unwrap_or_default()
+    }
+
+    fn window_pr_url(&self, index: &str) -> String {
+        self.state
+            .windows
+            .iter()
+            .find(|w| w.index == index)
+            .and_then(|w| w.pr.as_ref())
+            .map(|pr| pr.url.clone())
+            .unwrap_or_default()
+    }
+
+    fn pr_status_command(&self) -> PathBuf {
+        let repo_script = PathBuf::from(&self.ctx.home).join("dev/dotfiles/scripts/pr-status");
+        if repo_script.exists() {
+            repo_script
+        } else {
+            PathBuf::from("pr-status")
+        }
+    }
+
+    fn open_pr_url(&self, url: &str) {
+        if url.is_empty() {
+            return;
+        }
+        let opener = if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
+        let _ = Command::new(opener).arg(url).spawn();
+    }
+
+    fn refresh_pr_status(&self, index: &str) {
+        let pane = active_pane(&self.t, index, &self.ctx.home);
+        let path = self.window_path(index);
+        if pane.is_empty() || path.is_empty() {
+            return;
+        }
+        let _ = Command::new(self.pr_status_command())
+            .args(["refresh", "--pane", &pane, "--path", &path])
+            .status();
     }
 
     fn perform(&mut self, action: Action, term: &Term) -> bool {
@@ -100,9 +161,14 @@ impl Runtime {
                     .map(|w| w.name.clone())
                     .unwrap_or_default();
                 let cmd = format!("rename-window -t {index} '%%'");
-                let _ = self
-                    .t
-                    .run(&["command-prompt", "-I", &current, "-p", "Rename window:", &cmd]);
+                let _ = self.t.run(&[
+                    "command-prompt",
+                    "-I",
+                    &current,
+                    "-p",
+                    "Rename window:",
+                    &cmd,
+                ]);
             }
             Action::KillWindow(index) => {
                 let _ = self.t.run(&["kill-window", "-t", &index]);
@@ -110,6 +176,14 @@ impl Runtime {
             }
             Action::ClearReady(index) => {
                 clear_ready_panes(&self.ctx, &self.window_panes(&index));
+                self.refresh_windows(term);
+            }
+            Action::OpenPr(index) => {
+                let url = self.window_pr_url(&index);
+                self.open_pr_url(&url);
+            }
+            Action::RefreshPr(index) => {
+                self.refresh_pr_status(&index);
                 self.refresh_windows(term);
             }
         }
@@ -146,7 +220,9 @@ impl Runtime {
         let backend = CrosstermBackend::new(stdout);
         let mut term = Terminal::with_options(
             backend,
-            TerminalOptions { viewport: Viewport::Fullscreen },
+            TerminalOptions {
+                viewport: Viewport::Fullscreen,
+            },
         )?;
         term.hide_cursor()?;
 
@@ -154,7 +230,11 @@ impl Runtime {
         let result = self.event_loop(&mut term);
 
         disable_raw_mode()?;
-        execute!(term.backend_mut(), DisableMouseCapture, LeaveAlternateScreen)?;
+        execute!(
+            term.backend_mut(),
+            DisableMouseCapture,
+            LeaveAlternateScreen
+        )?;
         term.show_cursor()?;
         result
     }
@@ -196,14 +276,12 @@ impl Runtime {
         let all = self.state.lines();
 
         let rows: Vec<Line> = (0..height)
-            .map(|row| {
-                match all.get(scroll + row) {
-                    Some(vl) => render_line(&vl.text, vl.style, width, theme),
-                    None => Line::from(Span::styled(
-                        pad("", width),
-                        Style::default().bg(theme.bg).fg(theme.fg),
-                    )),
-                }
+            .map(|row| match all.get(scroll + row) {
+                Some(vl) => render_line(&vl.text, vl.style, width, theme),
+                None => Line::from(Span::styled(
+                    pad("", width),
+                    Style::default().bg(theme.bg).fg(theme.fg),
+                )),
             })
             .collect();
 

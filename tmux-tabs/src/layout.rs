@@ -32,7 +32,11 @@ pub struct VisualLine {
 
 impl VisualLine {
     fn blank() -> Self {
-        VisualLine { text: String::new(), style: LineStyle::Blank, target: None }
+        VisualLine {
+            text: String::new(),
+            style: LineStyle::Blank,
+            target: None,
+        }
     }
 }
 
@@ -85,11 +89,24 @@ pub fn build_lines(
                     target: Some(target.clone()),
                 });
             }
+            if let Some(pr) = &win.pr {
+                let suffix = if pr.draft { " draft" } else { "" };
+                lines.push(VisualLine {
+                    text: format!("{DETAIL_INDENT}PR #{}{suffix}", pr.number),
+                    style: LineStyle::Detail { active, bell },
+                    target: Some(target.clone()),
+                });
+            }
 
             lines.push(VisualLine::blank()); // margin below window
 
             if menu_window == win.index {
-                for action in action_menu_labels(confirm_kill) {
+                let has_pr_url = win
+                    .pr
+                    .as_ref()
+                    .map(|pr| !pr.url.is_empty())
+                    .unwrap_or(false);
+                for action in action_menu_labels(confirm_kill, has_pr_url) {
                     lines.push(VisualLine {
                         text: format!("   {action}"),
                         style: LineStyle::Action,

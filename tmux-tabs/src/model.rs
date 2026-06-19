@@ -8,6 +8,14 @@ use std::path::{Component, Path, PathBuf};
 
 /// A single tmux window as shown in the sidebar.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PullRequestStatus {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub draft: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Window {
     pub index: String,
     pub name: String,
@@ -20,6 +28,7 @@ pub struct Window {
     pub group: String,
     pub panes: Vec<String>,
     pub description: String,
+    pub pr: Option<PullRequestStatus>,
 }
 
 pub const ICON_READY: &str = "🔔 ";
@@ -115,7 +124,8 @@ pub fn project_group(path: &str, home: &str, cwd: &str) -> String {
 /// with `Other` always last (mirrors `grouped_windows`).
 pub fn grouped_windows(windows: &[Window]) -> Vec<(String, Vec<&Window>)> {
     let mut order: Vec<String> = Vec::new();
-    let mut groups: std::collections::HashMap<String, Vec<&Window>> = std::collections::HashMap::new();
+    let mut groups: std::collections::HashMap<String, Vec<&Window>> =
+        std::collections::HashMap::new();
     for w in windows {
         if !groups.contains_key(&w.group) {
             order.push(w.group.clone());
@@ -254,10 +264,12 @@ pub fn window_icon(w: &Window) -> &'static str {
 }
 
 /// Action menu labels for a window (mirrors `action_menu_labels`).
-pub fn action_menu_labels(confirm_kill: bool) -> Vec<&'static str> {
+pub fn action_menu_labels(confirm_kill: bool, has_pr_url: bool) -> Vec<&'static str> {
     if confirm_kill {
         vec!["confirm kill", "cancel"]
+    } else if has_pr_url {
+        vec!["open PR", "refresh PR", "rename", "kill", "clear ready"]
     } else {
-        vec!["rename", "kill", "clear ready"]
+        vec!["refresh PR", "rename", "kill", "clear ready"]
     }
 }
