@@ -5,8 +5,8 @@ use tmux_tabs::app::{handle_event, Action, Event, State};
 use tmux_tabs::layout::{build_lines, LineStyle, Target};
 use tmux_tabs::model::{
     adjacent_sidebar_window, clipped_text, grouped_windows, project_group, sidebar_width,
-    sidebar_width_with_config, sidebar_window_order, window_display_name, Direction, PrState,
-    PullRequestStatus, SidebarWidthConfig, Window,
+    pr_refresh_targets, sidebar_width_with_config, sidebar_window_order, window_display_name,
+    Direction, PrState, PullRequestStatus, SidebarWidthConfig, Window,
 };
 
 const HOME: &str = "/home/alec";
@@ -17,6 +17,8 @@ fn win(index: &str, group: &str, name: &str) -> Window {
         index: index.to_string(),
         name: name.to_string(),
         group: group.to_string(),
+        pane: format!("%{index}"),
+        path: format!("/repo/{index}"),
         ..Default::default()
     }
 }
@@ -72,6 +74,24 @@ fn sidebar_order_and_adjacency_wraps() {
         "1"
     ); // unknown -> first
     assert_eq!(adjacent_sidebar_window(&[], "1", Direction::Next), "");
+}
+
+#[test]
+fn pr_refresh_targets_include_only_windows_with_pane_and_path() {
+    let mut valid = win("1", "Apple", "a");
+    valid.pane = "%10".into();
+    valid.path = "/repo/a".into();
+    let mut no_pane = win("2", "Apple", "b");
+    no_pane.pane.clear();
+    no_pane.path = "/repo/b".into();
+    let mut no_path = win("3", "Apple", "c");
+    no_path.pane = "%30".into();
+    no_path.path.clear();
+
+    assert_eq!(
+        pr_refresh_targets(&[valid, no_pane, no_path]),
+        vec![("%10".to_string(), "/repo/a".to_string())]
+    );
 }
 
 #[test]

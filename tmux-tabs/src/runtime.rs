@@ -27,14 +27,13 @@ use unicode_width::UnicodeWidthStr;
 use crate::app::{handle_event, Action, Event, State};
 use crate::control::move_sidebar_to_window;
 use crate::layout::LineStyle;
-use crate::model::PrState;
+use crate::model::{pr_refresh_targets, PrState};
 use crate::theme::{load_theme, Theme};
-use crate::tmux::{
-    active_pane, clear_ready_panes, display, pane_var, tmux_windows, Ctx, RealTmux, Tmux,
-};
+use crate::tmux::{clear_ready_panes, display, pane_var, tmux_windows, Ctx, RealTmux, Tmux};
 
 const TICK: Duration = Duration::from_millis(200);
 const REFRESH: Duration = Duration::from_secs(1);
+const PR_REFRESH: Duration = Duration::from_secs(60);
 
 type Term = Terminal<CrosstermBackend<Stdout>>;
 
@@ -84,15 +83,6 @@ impl Runtime {
             .unwrap_or_default()
     }
 
-    fn window_path(&self, index: &str) -> String {
-        self.state
-            .windows
-            .iter()
-            .find(|w| w.index == index)
-            .map(|w| w.path.clone())
-            .unwrap_or_default()
-    }
-
     fn window_pr_url(&self, index: &str) -> String {
         self.state
             .windows
@@ -124,15 +114,27 @@ impl Runtime {
         let _ = Command::new(opener).arg(url).spawn();
     }
 
+    fn spawn_pr_refresh(&self, pane: String, path: String) {
+        let command = self.pr_status_command();
+        std::thread::spawn(move || {
+            let _ = Command::new(command)
+                .args(["refresh", "--pane", &pane, "--path", &path])
+                .status();
+        });
+    }
+
     fn refresh_pr_status(&self, index: &str) {
-        let pane = active_pane(&self.t, index, &self.ctx.home);
-        let path = self.window_path(index);
-        if pane.is_empty() || path.is_empty() {
-            return;
+        if let Some(window) = self.state.windows.iter().find(|w| w.index == index) {
+            if !window.pane.is_empty() && !window.path.is_empty() {
+                self.spawn_pr_refresh(window.pane.clone(), window.path.clone());
+            }
         }
-        let _ = Command::new(self.pr_status_command())
-            .args(["refresh", "--pane", &pane, "--path", &path])
-            .status();
+    }
+
+    fn refresh_all_pr_statuses(&self) {
+        for (pane, path) in pr_refresh_targets(&self.state.windows) {
+            self.spawn_pr_refresh(pane, path);
+        }
     }
 
     fn perform(&mut self, action: Action, term: &Term) -> bool {
@@ -243,6 +245,7 @@ impl Runtime {
     fn event_loop(&mut self, term: &mut Term) -> io::Result<()> {
         self.draw(term)?;
         let mut last_refresh = Instant::now();
+        let mut last_pr_refresh = Instant::now();
         loop {
             if event::poll(TICK)? {
                 if let Some(ev) = translate(event::read()?) {
@@ -260,6 +263,10 @@ impl Runtime {
                 self.refresh_windows(term);
                 self.draw(term)?;
                 last_refresh = Instant::now();
+            }
+            if last_pr_refresh.elapsed() >= PR_REFRESH {
+                self.refresh_all_pr_statuses();
+                last_pr_refresh = Instant::now();
             }
         }
     }

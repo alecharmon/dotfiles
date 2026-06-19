@@ -324,6 +324,7 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
             title: display_title,
             path: display_path.clone(),
             group: project_group(&display_path, &ctx.home, &ctx.cwd),
+            pane: rep.map(|p| p.id.clone()).unwrap_or_default(),
             panes: window_panes.get(idx).cloned().unwrap_or_default(),
             description: description_for_window(ctx, &session_id, idx),
             pr: rep.and_then(|p| pr_for_pane(ctx, &p.id)),

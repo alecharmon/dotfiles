@@ -68,6 +68,7 @@ pub struct Window {
     pub title: String,
     pub path: String,
     pub group: String,
+    pub pane: String,
     pub panes: Vec<String>,
     pub description: String,
     pub pr: Option<PullRequestStatus>,
@@ -195,6 +196,14 @@ pub fn sidebar_window_order(windows: &[Window]) -> Vec<String> {
     grouped_windows(windows)
         .into_iter()
         .flat_map(|(_, ws)| ws.into_iter().map(|w| w.index.clone()))
+        .collect()
+}
+
+pub fn pr_refresh_targets(windows: &[Window]) -> Vec<(String, String)> {
+    windows
+        .iter()
+        .filter(|w| !w.pane.is_empty() && !w.path.is_empty())
+        .map(|w| (w.pane.clone(), w.path.clone()))
         .collect()
 }
 
