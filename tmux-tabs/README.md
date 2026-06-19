@@ -55,7 +55,9 @@ them the sidebar simply omits descriptions.
 Optional PR status uses `../scripts/pr-status refresh --pane <pane> --path <repo>`,
 which shells out to `gh pr view` and caches results in
 `~/.cache/dotfiles/pr-status`. The sidebar only reads that cache during normal
-rendering. Right-click a window and choose `refresh PR` to update the cache;
+rendering. PR rows show a colored dot plus compact state (`CI…`, `failed`,
+`ready`, `draft`, `changes`, `merged`, `closed`, or `open`). Left-click a PR row
+to open it; right-click a window and choose `refresh PR` to update the cache;
 when a PR URL is cached, the menu also shows `open PR`.
 
 ## Architecture

@@ -31,6 +31,56 @@ def remove_marker(pane: str) -> None:
     marker_path(pane).unlink(missing_ok=True)
 
 
+def iter_values(value):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from iter_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from iter_values(child)
+
+
+def ci_state(status_check_rollup) -> Optional[str]:
+    states = set()
+    for item in iter_values(status_check_rollup):
+        for key in ("status", "conclusion"):
+            raw = item.get(key)
+            if isinstance(raw, str) and raw:
+                states.add(raw.upper())
+
+    if states & {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}:
+        return "ci_failed"
+    if states & {"PENDING", "IN_PROGRESS", "QUEUED", "REQUESTED", "WAITING", "EXPECTED"}:
+        return "ci_running"
+    if states and states <= {"SUCCESS", "COMPLETED", "SKIPPED", "NEUTRAL"}:
+        return "ready"
+    return None
+
+
+def display_state(gh_data: dict) -> str:
+    pr_state = (gh_data.get("state") or "").upper()
+    if pr_state == "MERGED" or gh_data.get("mergedAt"):
+        return "merged"
+    if pr_state == "CLOSED" or gh_data.get("closed"):
+        return "closed"
+    if gh_data.get("isDraft"):
+        return "draft"
+
+    ci = ci_state(gh_data.get("statusCheckRollup"))
+    if ci in {"ci_running", "ci_failed"}:
+        return ci
+
+    review = (gh_data.get("reviewDecision") or "").upper()
+    if review == "CHANGES_REQUESTED":
+        return "changes"
+    if review == "APPROVED":
+        return "ready" if ci in {None, "ready"} else ci
+    if ci == "ready":
+        return "ready"
+    return "open"
+
+
 def refresh(args: argparse.Namespace) -> int:
     pane = normalize_pane(args.pane)
     if not pane:
@@ -43,7 +93,13 @@ def refresh(args: argparse.Namespace) -> int:
 
     try:
         proc = subprocess.run(
-            ["gh", "pr", "view", "--json", "number,title,url,isDraft"],
+            [
+                "gh",
+                "pr",
+                "view",
+                "--json",
+                "number,title,url,isDraft,state,closed,mergedAt,reviewDecision,statusCheckRollup",
+            ],
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -76,6 +132,7 @@ def refresh(args: argparse.Namespace) -> int:
         "title": gh_data.get("title") or "",
         "url": url,
         "draft": bool(gh_data.get("isDraft")),
+        "displayState": display_state(gh_data),
         "updatedAt": int(time.time()),
     }
     marker_path(pane).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")

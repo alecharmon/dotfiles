@@ -155,8 +155,11 @@ pub fn handle_event(state: &mut State, event: Event) -> Vec<Action> {
         Event::RightClick { row } => {
             let idx = state.scroll + row as usize;
             let lines = state.lines();
-            if let Some(Target::SwitchTo(index)) = lines.get(idx).and_then(|l| l.target.clone()) {
-                state.open_action_menu(&index);
+            match lines.get(idx).and_then(|l| l.target.clone()) {
+                Some(Target::SwitchTo(index)) | Some(Target::OpenPr(index)) => {
+                    state.open_action_menu(&index);
+                }
+                _ => {}
             }
         }
     }

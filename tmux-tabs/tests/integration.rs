@@ -5,7 +5,7 @@ use tmux_tabs::app::{handle_event, Action, Event, State};
 use tmux_tabs::layout::{build_lines, LineStyle, Target};
 use tmux_tabs::model::{
     adjacent_sidebar_window, clipped_text, grouped_windows, project_group, sidebar_width,
-    sidebar_width_with_config, sidebar_window_order, window_display_name, Direction,
+    sidebar_width_with_config, sidebar_window_order, window_display_name, Direction, PrState,
     PullRequestStatus, SidebarWidthConfig, Window,
 };
 
@@ -286,6 +286,7 @@ fn action_menu_offers_open_pr_when_window_has_pr_url() {
         title: "Show PRs".into(),
         url: "https://github.com/example/repo/pull/42".into(),
         draft: false,
+        state: PrState::Open,
     });
     s.menu_window = "1".into();
 
@@ -301,9 +302,41 @@ fn layout_shows_open_pr_detail_line() {
         title: "Show PRs".into(),
         url: "https://github.com/example/repo/pull/42".into(),
         draft: false,
+        state: PrState::Ready,
     });
 
-    assert!(s.lines().iter().any(|l| l.text == "   PR #42"));
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 ready"));
+    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::Ready, .. })));
+}
+
+#[test]
+fn layout_marks_ci_running_pr_detail_line() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::CiRunning,
+    });
+
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 CI…"));
+    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::CiRunning, .. })));
+}
+
+#[test]
+fn layout_marks_failed_pr_detail_line() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::CiFailed,
+    });
+
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 failed"));
+    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::CiFailed, .. })));
 }
 
 #[test]
@@ -314,9 +347,10 @@ fn layout_marks_draft_pr_detail_line() {
         title: "Show PRs".into(),
         url: "https://github.com/example/repo/pull/42".into(),
         draft: true,
+        state: PrState::Draft,
     });
 
-    assert!(s.lines().iter().any(|l| l.text == "   PR #42 draft"));
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 draft"));
 }
 
 #[test]
@@ -327,12 +361,13 @@ fn clicking_pr_detail_line_opens_pr() {
         title: "Show PRs".into(),
         url: "https://github.com/example/repo/pull/42".into(),
         draft: false,
+        state: PrState::Ready,
     });
 
     let row = s
         .lines()
         .iter()
-        .position(|l| l.text == "   PR #42")
+        .position(|l| l.text == "   ● PR #42 ready")
         .unwrap() as u16;
 
     assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::OpenPr("1".into())]);
@@ -346,15 +381,37 @@ fn clicking_pr_detail_without_url_switches_window() {
         title: "Show PRs".into(),
         url: String::new(),
         draft: false,
+        state: PrState::Open,
     });
 
     let row = s
         .lines()
         .iter()
-        .position(|l| l.text == "   PR #42")
+        .position(|l| l.text == "   ● PR #42 open")
         .unwrap() as u16;
 
     assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::SwitchTo("1".into())]);
+}
+
+#[test]
+fn right_clicking_pr_detail_opens_action_menu() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::Ready,
+    });
+
+    let row = s
+        .lines()
+        .iter()
+        .position(|l| l.text == "   ● PR #42 ready")
+        .unwrap() as u16;
+
+    handle_event(&mut s, Event::RightClick { row });
+    assert_eq!(s.menu_window, "1");
 }
 
 #[test]
@@ -365,6 +422,7 @@ fn action_menu_pr_items_emit_actions() {
         title: "Show PRs".into(),
         url: "https://github.com/example/repo/pull/42".into(),
         draft: false,
+        state: PrState::Open,
     });
     s.menu_window = "1".into();
 

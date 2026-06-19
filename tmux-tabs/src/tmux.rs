@@ -6,7 +6,7 @@ use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::model::{project_group, window_display_name, PullRequestStatus, Window};
+use crate::model::{project_group, window_display_name, PrState, PullRequestStatus, Window};
 
 /// Abstraction over running tmux. Real runtime shells out; tests fake it.
 pub trait Tmux {
@@ -349,11 +349,16 @@ fn pr_for_pane(ctx: &Ctx, pane: &str) -> Option<PullRequestStatus> {
         .pr_status_dir()
         .join(format!("{}.json", pane.trim_start_matches('%')));
     let text = std::fs::read_to_string(&path).ok()?;
+    let draft = json_bool_field(&text, "draft").unwrap_or(false);
+    let state = json_string_field(&text, "displayState")
+        .map(|s| PrState::from_cache(&s))
+        .unwrap_or(if draft { PrState::Draft } else { PrState::Open });
     Some(PullRequestStatus {
         number: json_u64_field(&text, "number").unwrap_or_default(),
         title: json_string_field(&text, "title").unwrap_or_default(),
         url: json_string_field(&text, "url").unwrap_or_default(),
-        draft: json_bool_field(&text, "draft").unwrap_or(false),
+        draft,
+        state,
     })
 }
 

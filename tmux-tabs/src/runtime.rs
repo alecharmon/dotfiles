@@ -27,6 +27,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::app::{handle_event, Action, Event, State};
 use crate::control::move_sidebar_to_window;
 use crate::layout::LineStyle;
+use crate::model::PrState;
 use crate::theme::{load_theme, Theme};
 use crate::tmux::{
     active_pane, clear_ready_panes, display, pane_var, tmux_windows, Ctx, RealTmux, Tmux,
@@ -315,6 +316,10 @@ fn pad(text: &str, width: usize) -> String {
 }
 
 fn render_line(text: &str, style: LineStyle, width: usize, theme: &Theme) -> Line<'static> {
+    if let LineStyle::Pr { state, .. } = style {
+        return render_pr_line(text, style, state, width, theme);
+    }
+
     let (bg, fg, bold, dim) = colors_for(style, theme);
     let mut s = Style::default().bg(bg).fg(fg);
     if bold {
@@ -324,6 +329,44 @@ fn render_line(text: &str, style: LineStyle, width: usize, theme: &Theme) -> Lin
         s = s.add_modifier(Modifier::DIM);
     }
     Line::from(Span::styled(pad(text, width), s))
+}
+
+fn render_pr_line(
+    text: &str,
+    style: LineStyle,
+    state: PrState,
+    width: usize,
+    theme: &Theme,
+) -> Line<'static> {
+    let (bg, fg, _bold, dim) = colors_for(style, theme);
+    let padded = pad(text, width);
+    let dot_color = pr_dot_color(state);
+    match padded.find('●') {
+        Some(dot) => {
+            let after_dot = dot + '●'.len_utf8();
+            let mut text_style = Style::default().bg(bg).fg(fg);
+            if dim {
+                text_style = text_style.add_modifier(Modifier::DIM);
+            }
+            Line::from(vec![
+                Span::styled(padded[..dot].to_string(), text_style),
+                Span::styled("●".to_string(), Style::default().bg(bg).fg(dot_color)),
+                Span::styled(padded[after_dot..].to_string(), text_style),
+            ])
+        }
+        None => Line::from(Span::styled(padded, Style::default().bg(bg).fg(fg))),
+    }
+}
+
+fn pr_dot_color(state: PrState) -> Color {
+    match state {
+        PrState::CiRunning => Color::Yellow,
+        PrState::CiFailed => Color::Red,
+        PrState::Changes => Color::Magenta,
+        PrState::Ready => Color::Green,
+        PrState::Merged => Color::Magenta,
+        PrState::Draft | PrState::Closed | PrState::Open => Color::DarkGray,
+    }
 }
 
 fn colors_for(style: LineStyle, theme: &Theme) -> (Color, Color, bool, bool) {
@@ -339,7 +382,7 @@ fn colors_for(style: LineStyle, theme: &Theme) -> (Color, Color, bool, bool) {
                 (theme.bg, theme.fg, true, false)
             }
         }
-        LineStyle::Detail { active, bell } => {
+        LineStyle::Detail { active, bell } | LineStyle::Pr { active, bell, .. } => {
             let bg = if active {
                 theme.active_bg
             } else if bell {

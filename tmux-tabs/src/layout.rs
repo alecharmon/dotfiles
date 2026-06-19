@@ -5,7 +5,7 @@
 //! pure makes scroll/click behaviour directly testable without a terminal.
 
 use crate::model::{
-    action_menu_labels, clipped_text, grouped_windows, window_icon, Window, DETAIL_INDENT,
+    action_menu_labels, clipped_text, grouped_windows, window_icon, PrState, Window, DETAIL_INDENT,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +21,7 @@ pub enum LineStyle {
     Group,
     WindowName { active: bool, bell: bool },
     Detail { active: bool, bell: bool },
+    Pr { active: bool, bell: bool, state: PrState },
     Action,
 }
 
@@ -91,15 +92,14 @@ pub fn build_lines(
                 });
             }
             if let Some(pr) = &win.pr {
-                let suffix = if pr.draft { " draft" } else { "" };
                 let pr_target = if pr.url.is_empty() {
                     target.clone()
                 } else {
                     Target::OpenPr(win.index.clone())
                 };
                 lines.push(VisualLine {
-                    text: format!("{DETAIL_INDENT}PR #{}{suffix}", pr.number),
-                    style: LineStyle::Detail { active, bell },
+                    text: format!("{DETAIL_INDENT}● PR #{} {}", pr.number, pr.state.label()),
+                    style: LineStyle::Pr { active, bell, state: pr.state },
                     target: Some(pr_target),
                 });
             }

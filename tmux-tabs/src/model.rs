@@ -6,6 +6,47 @@
 
 use std::path::{Component, Path, PathBuf};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PrState {
+    Draft,
+    CiRunning,
+    CiFailed,
+    Changes,
+    Ready,
+    Merged,
+    Closed,
+    #[default]
+    Open,
+}
+
+impl PrState {
+    pub fn label(self) -> &'static str {
+        match self {
+            PrState::Draft => "draft",
+            PrState::CiRunning => "CI…",
+            PrState::CiFailed => "failed",
+            PrState::Changes => "changes",
+            PrState::Ready => "ready",
+            PrState::Merged => "merged",
+            PrState::Closed => "closed",
+            PrState::Open => "open",
+        }
+    }
+
+    pub fn from_cache(value: &str) -> Self {
+        match value {
+            "draft" => PrState::Draft,
+            "ci_running" => PrState::CiRunning,
+            "ci_failed" => PrState::CiFailed,
+            "changes" => PrState::Changes,
+            "ready" => PrState::Ready,
+            "merged" => PrState::Merged,
+            "closed" => PrState::Closed,
+            _ => PrState::Open,
+        }
+    }
+}
+
 /// A single tmux window as shown in the sidebar.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PullRequestStatus {
@@ -13,6 +54,7 @@ pub struct PullRequestStatus {
     pub title: String,
     pub url: String,
     pub draft: bool,
+    pub state: PrState,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
