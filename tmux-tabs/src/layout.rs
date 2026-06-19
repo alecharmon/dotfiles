@@ -5,12 +5,13 @@
 //! pure makes scroll/click behaviour directly testable without a terminal.
 
 use crate::model::{
-    action_menu_labels, clipped_text, grouped_windows, window_icon, Window, DETAIL_INDENT,
+    action_menu_labels, clipped_text, grouped_windows, window_icon, PrState, Window, DETAIL_INDENT,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     SwitchTo(String),
+    OpenPr(String),
     RunAction { index: String, action: String },
 }
 
@@ -20,6 +21,7 @@ pub enum LineStyle {
     Group,
     WindowName { active: bool, bell: bool },
     Detail { active: bool, bell: bool },
+    Pr { active: bool, bell: bool, state: PrState },
     Action,
 }
 
@@ -32,7 +34,11 @@ pub struct VisualLine {
 
 impl VisualLine {
     fn blank() -> Self {
-        VisualLine { text: String::new(), style: LineStyle::Blank, target: None }
+        VisualLine {
+            text: String::new(),
+            style: LineStyle::Blank,
+            target: None,
+        }
     }
 }
 
@@ -85,11 +91,28 @@ pub fn build_lines(
                     target: Some(target.clone()),
                 });
             }
+            if let Some(pr) = &win.pr {
+                let pr_target = if pr.url.is_empty() {
+                    target.clone()
+                } else {
+                    Target::OpenPr(win.index.clone())
+                };
+                lines.push(VisualLine {
+                    text: format!("{DETAIL_INDENT}● PR #{} {}", pr.number, pr.state.label()),
+                    style: LineStyle::Pr { active, bell, state: pr.state },
+                    target: Some(pr_target),
+                });
+            }
 
             lines.push(VisualLine::blank()); // margin below window
 
             if menu_window == win.index {
-                for action in action_menu_labels(confirm_kill) {
+                let has_pr_url = win
+                    .pr
+                    .as_ref()
+                    .map(|pr| !pr.url.is_empty())
+                    .unwrap_or(false);
+                for action in action_menu_labels(confirm_kill, has_pr_url) {
                     lines.push(VisualLine {
                         text: format!("   {action}"),
                         style: LineStyle::Action,

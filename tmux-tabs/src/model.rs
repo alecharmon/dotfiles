@@ -6,7 +6,57 @@
 
 use std::path::{Component, Path, PathBuf};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PrState {
+    Draft,
+    CiRunning,
+    CiFailed,
+    Changes,
+    Ready,
+    Merged,
+    Closed,
+    #[default]
+    Open,
+}
+
+impl PrState {
+    pub fn label(self) -> &'static str {
+        match self {
+            PrState::Draft => "draft",
+            PrState::CiRunning => "CI…",
+            PrState::CiFailed => "failed",
+            PrState::Changes => "changes",
+            PrState::Ready => "ready",
+            PrState::Merged => "merged",
+            PrState::Closed => "closed",
+            PrState::Open => "open",
+        }
+    }
+
+    pub fn from_cache(value: &str) -> Self {
+        match value {
+            "draft" => PrState::Draft,
+            "ci_running" => PrState::CiRunning,
+            "ci_failed" => PrState::CiFailed,
+            "changes" => PrState::Changes,
+            "ready" => PrState::Ready,
+            "merged" => PrState::Merged,
+            "closed" => PrState::Closed,
+            _ => PrState::Open,
+        }
+    }
+}
+
 /// A single tmux window as shown in the sidebar.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PullRequestStatus {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub draft: bool,
+    pub state: PrState,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Window {
     pub index: String,
@@ -18,8 +68,10 @@ pub struct Window {
     pub title: String,
     pub path: String,
     pub group: String,
+    pub pane: String,
     pub panes: Vec<String>,
     pub description: String,
+    pub pr: Option<PullRequestStatus>,
 }
 
 pub const ICON_READY: &str = "🔔 ";
@@ -115,7 +167,8 @@ pub fn project_group(path: &str, home: &str, cwd: &str) -> String {
 /// with `Other` always last (mirrors `grouped_windows`).
 pub fn grouped_windows(windows: &[Window]) -> Vec<(String, Vec<&Window>)> {
     let mut order: Vec<String> = Vec::new();
-    let mut groups: std::collections::HashMap<String, Vec<&Window>> = std::collections::HashMap::new();
+    let mut groups: std::collections::HashMap<String, Vec<&Window>> =
+        std::collections::HashMap::new();
     for w in windows {
         if !groups.contains_key(&w.group) {
             order.push(w.group.clone());
@@ -143,6 +196,14 @@ pub fn sidebar_window_order(windows: &[Window]) -> Vec<String> {
     grouped_windows(windows)
         .into_iter()
         .flat_map(|(_, ws)| ws.into_iter().map(|w| w.index.clone()))
+        .collect()
+}
+
+pub fn pr_refresh_targets(windows: &[Window]) -> Vec<(String, String)> {
+    windows
+        .iter()
+        .filter(|w| !w.pane.is_empty() && !w.path.is_empty())
+        .map(|w| (w.pane.clone(), w.path.clone()))
         .collect()
 }
 
@@ -254,10 +315,12 @@ pub fn window_icon(w: &Window) -> &'static str {
 }
 
 /// Action menu labels for a window (mirrors `action_menu_labels`).
-pub fn action_menu_labels(confirm_kill: bool) -> Vec<&'static str> {
+pub fn action_menu_labels(confirm_kill: bool, has_pr_url: bool) -> Vec<&'static str> {
     if confirm_kill {
         vec!["confirm kill", "cancel"]
+    } else if has_pr_url {
+        vec!["open PR", "refresh PR", "rename", "kill", "clear ready"]
     } else {
-        vec!["rename", "kill", "clear ready"]
+        vec!["refresh PR", "rename", "kill", "clear ready"]
     }
 }

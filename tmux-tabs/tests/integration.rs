@@ -5,8 +5,8 @@ use tmux_tabs::app::{handle_event, Action, Event, State};
 use tmux_tabs::layout::{build_lines, LineStyle, Target};
 use tmux_tabs::model::{
     adjacent_sidebar_window, clipped_text, grouped_windows, project_group, sidebar_width,
-    sidebar_width_with_config, sidebar_window_order, window_display_name, Direction,
-    SidebarWidthConfig, Window,
+    pr_refresh_targets, sidebar_width_with_config, sidebar_window_order, window_display_name,
+    Direction, PrState, PullRequestStatus, SidebarWidthConfig, Window,
 };
 
 const HOME: &str = "/home/alec";
@@ -17,6 +17,8 @@ fn win(index: &str, group: &str, name: &str) -> Window {
         index: index.to_string(),
         name: name.to_string(),
         group: group.to_string(),
+        pane: format!("%{index}"),
+        path: format!("/repo/{index}"),
         ..Default::default()
     }
 }
@@ -27,9 +29,15 @@ fn win(index: &str, group: &str, name: &str) -> Window {
 fn project_group_classifies_paths() {
     assert_eq!(project_group("/home/alec/dev", HOME, CWD), "dev");
     assert_eq!(project_group("/home/alec/dev/myrepo", HOME, CWD), "myrepo");
-    assert_eq!(project_group("/home/alec/dev/myrepo/sub", HOME, CWD), "myrepo");
+    assert_eq!(
+        project_group("/home/alec/dev/myrepo/sub", HOME, CWD),
+        "myrepo"
+    );
     assert_eq!(project_group("/home/alec/dev/flora/api", HOME, CWD), "api");
-    assert_eq!(project_group("/home/alec/dev/flora/api/x", HOME, CWD), "api");
+    assert_eq!(
+        project_group("/home/alec/dev/flora/api/x", HOME, CWD),
+        "api"
+    );
     assert_eq!(project_group("/home/alec/dev/flora", HOME, CWD), "flora");
     assert_eq!(project_group("/etc", HOME, CWD), "Other");
     assert_eq!(project_group("~/dev/zed", HOME, CWD), "zed");
@@ -43,7 +51,10 @@ fn groups_order_alphabetically_with_other_last() {
         win("3", "Apple", "c"),
         win("4", "Other", "d"),
     ];
-    let names: Vec<String> = grouped_windows(&windows).into_iter().map(|(n, _)| n).collect();
+    let names: Vec<String> = grouped_windows(&windows)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     assert_eq!(names, vec!["Apple", "zebra", "Other"]);
 }
 
@@ -58,8 +69,29 @@ fn sidebar_order_and_adjacency_wraps() {
     assert_eq!(adjacent_sidebar_window(&windows, "1", Direction::Next), "2");
     assert_eq!(adjacent_sidebar_window(&windows, "3", Direction::Next), "1"); // wrap
     assert_eq!(adjacent_sidebar_window(&windows, "1", Direction::Prev), "3"); // wrap
-    assert_eq!(adjacent_sidebar_window(&windows, "99", Direction::Next), "1"); // unknown -> first
+    assert_eq!(
+        adjacent_sidebar_window(&windows, "99", Direction::Next),
+        "1"
+    ); // unknown -> first
     assert_eq!(adjacent_sidebar_window(&[], "1", Direction::Next), "");
+}
+
+#[test]
+fn pr_refresh_targets_include_only_windows_with_pane_and_path() {
+    let mut valid = win("1", "Apple", "a");
+    valid.pane = "%10".into();
+    valid.path = "/repo/a".into();
+    let mut no_pane = win("2", "Apple", "b");
+    no_pane.pane.clear();
+    no_pane.path = "/repo/b".into();
+    let mut no_path = win("3", "Apple", "c");
+    no_path.pane = "%30".into();
+    no_path.path.clear();
+
+    assert_eq!(
+        pr_refresh_targets(&[valid, no_pane, no_path]),
+        vec![("%10".to_string(), "/repo/a".to_string())]
+    );
 }
 
 #[test]
@@ -79,7 +111,9 @@ fn width_grows_with_content_and_is_capped() {
 #[test]
 fn descriptions_do_not_expand_sidebar_width() {
     let mut described = win("1", "g", "short");
-    described.description = "this is a very long generated description that should be clipped, not widen the sidebar".to_string();
+    described.description =
+        "this is a very long generated description that should be clipped, not widen the sidebar"
+            .to_string();
 
     assert_eq!(sidebar_width(&[described], 400), 18);
 }
@@ -186,10 +220,9 @@ fn right_click_opens_and_toggles_action_menu() {
     handle_event(&mut s, Event::RightClick { row });
     assert_eq!(s.menu_window, "3");
     // Menu items now exist in the layout.
-    assert!(s
-        .lines()
-        .iter()
-        .any(|l| matches!(&l.target, Some(Target::RunAction { action, .. }) if action == "rename")));
+    assert!(s.lines().iter().any(
+        |l| matches!(&l.target, Some(Target::RunAction { action, .. }) if action == "rename")
+    ));
 
     // Right-clicking the same window again closes it.
     handle_event(&mut s, Event::RightClick { row });
@@ -204,9 +237,9 @@ fn action_menu_kill_requires_confirmation() {
     let kill_row = |s: &State| {
         s.lines()
             .iter()
-            .position(|l| {
-                matches!(&l.target, Some(Target::RunAction { action, .. }) if action == "kill")
-            })
+            .position(
+                |l| matches!(&l.target, Some(Target::RunAction { action, .. }) if action == "kill"),
+            )
             .unwrap() as u16
     };
     // First "kill" click only arms confirmation, no external action.
@@ -229,27 +262,204 @@ fn action_menu_kill_requires_confirmation() {
     assert!(!s.confirm_kill);
 }
 
+fn row_of_action(s: &State, action: &str) -> Option<u16> {
+    s.lines()
+        .iter()
+        .position(|l| matches!(&l.target, Some(Target::RunAction { action: a, .. }) if a == action))
+        .map(|p| p as u16)
+}
+
 #[test]
 fn action_menu_rename_and_clear_ready_emit_actions() {
     let mut s = three_window_state();
     s.menu_window = "1".into();
-    let row_of = |s: &State, action: &str| {
-        s.lines()
-            .iter()
-            .position(|l| matches!(&l.target, Some(Target::RunAction { action: a, .. }) if a == action))
-            .map(|p| p as u16)
-    };
 
-    let r = row_of(&s, "rename").unwrap();
-    assert_eq!(handle_event(&mut s, Event::Click { row: r }), vec![Action::Rename("1".into())]);
+    let r = row_of_action(&s, "rename").unwrap();
+    assert_eq!(
+        handle_event(&mut s, Event::Click { row: r }),
+        vec![Action::Rename("1".into())]
+    );
     assert_eq!(s.menu_window, "");
 
     s.menu_window = "1".into();
-    let r = row_of(&s, "clear ready").unwrap();
+    let r = row_of_action(&s, "clear ready").unwrap();
     assert_eq!(
         handle_event(&mut s, Event::Click { row: r }),
         vec![Action::ClearReady("1".into())]
     );
+}
+
+#[test]
+fn action_menu_always_offers_refresh_pr() {
+    let mut s = three_window_state();
+    s.menu_window = "1".into();
+
+    assert!(row_of_action(&s, "refresh PR").is_some());
+    assert!(row_of_action(&s, "open PR").is_none());
+}
+
+#[test]
+fn action_menu_offers_open_pr_when_window_has_pr_url() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::Open,
+    });
+    s.menu_window = "1".into();
+
+    assert!(row_of_action(&s, "open PR").is_some());
+    assert!(row_of_action(&s, "refresh PR").is_some());
+}
+
+#[test]
+fn layout_shows_open_pr_detail_line() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::Ready,
+    });
+
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 ready"));
+    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::Ready, .. })));
+}
+
+#[test]
+fn layout_marks_ci_running_pr_detail_line() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::CiRunning,
+    });
+
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 CI…"));
+    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::CiRunning, .. })));
+}
+
+#[test]
+fn layout_marks_failed_pr_detail_line() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::CiFailed,
+    });
+
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 failed"));
+    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::CiFailed, .. })));
+}
+
+#[test]
+fn layout_marks_draft_pr_detail_line() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: true,
+        state: PrState::Draft,
+    });
+
+    assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 draft"));
+}
+
+#[test]
+fn clicking_pr_detail_line_opens_pr() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::Ready,
+    });
+
+    let row = s
+        .lines()
+        .iter()
+        .position(|l| l.text == "   ● PR #42 ready")
+        .unwrap() as u16;
+
+    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::OpenPr("1".into())]);
+}
+
+#[test]
+fn clicking_pr_detail_without_url_switches_window() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: String::new(),
+        draft: false,
+        state: PrState::Open,
+    });
+
+    let row = s
+        .lines()
+        .iter()
+        .position(|l| l.text == "   ● PR #42 open")
+        .unwrap() as u16;
+
+    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::SwitchTo("1".into())]);
+}
+
+#[test]
+fn right_clicking_pr_detail_opens_action_menu() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::Ready,
+    });
+
+    let row = s
+        .lines()
+        .iter()
+        .position(|l| l.text == "   ● PR #42 ready")
+        .unwrap() as u16;
+
+    handle_event(&mut s, Event::RightClick { row });
+    assert_eq!(s.menu_window, "1");
+}
+
+#[test]
+fn action_menu_pr_items_emit_actions() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::Open,
+    });
+    s.menu_window = "1".into();
+
+    let r = row_of_action(&s, "open PR").unwrap();
+    assert_eq!(
+        handle_event(&mut s, Event::Click { row: r }),
+        vec![Action::OpenPr("1".into())]
+    );
+    assert_eq!(s.menu_window, "");
+
+    s.menu_window = "1".into();
+    let r = row_of_action(&s, "refresh PR").unwrap();
+    assert_eq!(
+        handle_event(&mut s, Event::Click { row: r }),
+        vec![Action::RefreshPr("1".into())]
+    );
+    assert_eq!(s.menu_window, "");
 }
 
 // ----- scrolling -----
@@ -260,7 +470,12 @@ fn scroll_moves_viewport_within_bounds() {
     for i in 0..40 {
         windows.push(win(&i.to_string(), "g", &format!("window-{i}")));
     }
-    let mut s = State { windows, width: 30, height: 10, ..Default::default() };
+    let mut s = State {
+        windows,
+        width: 30,
+        height: 10,
+        ..Default::default()
+    };
     let max = s.max_scroll();
     assert!(max > 0);
 
@@ -293,7 +508,12 @@ fn clicking_while_scrolled_hits_the_right_window() {
     for i in 0..40 {
         windows.push(win(&i.to_string(), "g", &format!("window-{i}")));
     }
-    let mut s = State { windows, width: 30, height: 10, ..Default::default() };
+    let mut s = State {
+        windows,
+        width: 30,
+        height: 10,
+        ..Default::default()
+    };
     s.scroll = 8;
 
     // Whatever window line sits at screen row 2 should be the one switched to.

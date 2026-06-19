@@ -11,9 +11,13 @@ use crate::layout::{build_lines, Target, VisualLine};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// Left-button press at 0-based row within the sidebar pane.
-    Click { row: u16 },
+    Click {
+        row: u16,
+    },
     /// Right or middle button press at 0-based row.
-    RightClick { row: u16 },
+    RightClick {
+        row: u16,
+    },
     ScrollUp,
     ScrollDown,
     Key(char),
@@ -26,6 +30,8 @@ pub enum Action {
     Rename(String),
     KillWindow(String),
     ClearReady(String),
+    OpenPr(String),
+    RefreshPr(String),
     Quit,
 }
 
@@ -42,7 +48,12 @@ pub struct State {
 
 impl State {
     pub fn lines(&self) -> Vec<VisualLine> {
-        build_lines(&self.windows, &self.menu_window, self.confirm_kill, self.width)
+        build_lines(
+            &self.windows,
+            &self.menu_window,
+            self.confirm_kill,
+            self.width,
+        )
     }
 
     /// Largest valid scroll offset given current content and viewport height.
@@ -59,8 +70,7 @@ impl State {
 
     /// Keep state consistent after the window list or viewport changes.
     pub fn on_data_changed(&mut self) {
-        if !self.menu_window.is_empty()
-            && !self.windows.iter().any(|w| w.index == self.menu_window)
+        if !self.menu_window.is_empty() && !self.windows.iter().any(|w| w.index == self.menu_window)
         {
             self.menu_window.clear();
             self.confirm_kill = false;
@@ -79,6 +89,14 @@ impl State {
 
     fn run_window_action(&mut self, index: &str, action: &str, out: &mut Vec<Action>) {
         match action {
+            "open PR" => {
+                out.push(Action::OpenPr(index.to_string()));
+                self.menu_window.clear();
+            }
+            "refresh PR" => {
+                out.push(Action::RefreshPr(index.to_string()));
+                self.menu_window.clear();
+            }
             "rename" => {
                 out.push(Action::Rename(index.to_string()));
                 self.menu_window.clear();
@@ -125,6 +143,9 @@ pub fn handle_event(state: &mut State, event: Event) -> Vec<Action> {
                     state.current_window = index.clone();
                     out.push(Action::SwitchTo(index));
                 }
+                Some(Target::OpenPr(index)) => {
+                    out.push(Action::OpenPr(index));
+                }
                 Some(Target::RunAction { index, action }) => {
                     state.run_window_action(&index, &action, &mut out);
                 }
@@ -134,8 +155,11 @@ pub fn handle_event(state: &mut State, event: Event) -> Vec<Action> {
         Event::RightClick { row } => {
             let idx = state.scroll + row as usize;
             let lines = state.lines();
-            if let Some(Target::SwitchTo(index)) = lines.get(idx).and_then(|l| l.target.clone()) {
-                state.open_action_menu(&index);
+            match lines.get(idx).and_then(|l| l.target.clone()) {
+                Some(Target::SwitchTo(index)) | Some(Target::OpenPr(index)) => {
+                    state.open_action_menu(&index);
+                }
+                _ => {}
             }
         }
     }

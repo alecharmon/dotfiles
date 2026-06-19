@@ -19,8 +19,8 @@ tmux-tabs --select next   move the sidebar to the next grouped window
 Inside the sidebar:
 
 - **Left-click** a window to switch to it.
-- **Right/middle-click** a window to open its action menu (rename / kill /
-  clear ready).
+- **Right/middle-click** a window to open its action menu (open PR when cached /
+  refresh PR / rename / kill / clear ready).
 - **Mouse wheel** scrolls the window list.
 - **q** quits.
 
@@ -51,6 +51,16 @@ The launcher builds this automatically on first use. `setup.sh` /
 
 Optional descriptions require `llm-redactor-exec` and `pi` on `PATH`; without
 them the sidebar simply omits descriptions.
+
+Optional PR status uses `../scripts/pr-status refresh --pane <pane> --path <repo>`,
+which shells out to `gh pr view` and caches results in
+`~/.cache/dotfiles/pr-status`. The sidebar only reads that cache during normal
+rendering. PR rows show a colored dot plus compact state (`CI…`, `failed`,
+`ready`, `draft`, `changes`, `merged`, `closed`, or `open`). While the sidebar is
+open it asynchronously refreshes PR state for every visible tmux window every 60
+seconds. Left-click a PR row to open it; right-click a window and choose
+`refresh PR` to update the cache immediately; when a PR URL is cached, the menu
+also shows `open PR`.
 
 ## Architecture
 

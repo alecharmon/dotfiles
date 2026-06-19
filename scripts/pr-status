@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Cache the open GitHub PR for a tmux pane/repo path."""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Optional
+
+
+def marker_dir() -> Path:
+    cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")).expanduser()
+    return cache_home / "dotfiles" / "pr-status"
+
+
+def normalize_pane(pane: Optional[str]) -> Optional[str]:
+    pane = pane or os.environ.get("TMUX_PANE")
+    if not pane:
+        return None
+    return pane if pane.startswith("%") else f"%{pane}"
+
+
+def marker_path(pane: str) -> Path:
+    return marker_dir() / f"{pane.lstrip('%')}.json"
+
+
+def remove_marker(pane: str) -> None:
+    marker_path(pane).unlink(missing_ok=True)
+
+
+def iter_values(value):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from iter_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from iter_values(child)
+
+
+def ci_state(status_check_rollup) -> Optional[str]:
+    states = set()
+    for item in iter_values(status_check_rollup):
+        for key in ("status", "conclusion"):
+            raw = item.get(key)
+            if isinstance(raw, str) and raw:
+                states.add(raw.upper())
+
+    if states & {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}:
+        return "ci_failed"
+    if states & {"PENDING", "IN_PROGRESS", "QUEUED", "REQUESTED", "WAITING", "EXPECTED"}:
+        return "ci_running"
+    if states and states <= {"SUCCESS", "COMPLETED", "SKIPPED", "NEUTRAL"}:
+        return "ready"
+    return None
+
+
+def display_state(gh_data: dict) -> str:
+    pr_state = (gh_data.get("state") or "").upper()
+    if pr_state == "MERGED" or gh_data.get("mergedAt"):
+        return "merged"
+    if pr_state == "CLOSED" or gh_data.get("closed"):
+        return "closed"
+    if gh_data.get("isDraft"):
+        return "draft"
+
+    ci = ci_state(gh_data.get("statusCheckRollup"))
+    if ci in {"ci_running", "ci_failed"}:
+        return ci
+
+    review = (gh_data.get("reviewDecision") or "").upper()
+    if review == "CHANGES_REQUESTED":
+        return "changes"
+    if review == "APPROVED":
+        return "ready" if ci in {None, "ready"} else ci
+    if ci == "ready":
+        return "ready"
+    return "open"
+
+
+def refresh(args: argparse.Namespace) -> int:
+    pane = normalize_pane(args.pane)
+    if not pane:
+        return 0
+
+    repo_path = Path(args.path).expanduser()
+    if not repo_path.exists():
+        remove_marker(pane)
+        return 0
+
+    try:
+        proc = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "view",
+                "--json",
+                "number,title,url,isDraft,state,closed,mergedAt,reviewDecision,statusCheckRollup",
+            ],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        remove_marker(pane)
+        return 0
+
+    if proc.returncode != 0:
+        remove_marker(pane)
+        return 0
+
+    try:
+        gh_data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        remove_marker(pane)
+        return 0
+
+    url = gh_data.get("url") or ""
+    if not url:
+        remove_marker(pane)
+        return 0
+
+    marker_dir().mkdir(parents=True, exist_ok=True)
+    data = {
+        "pane": pane,
+        "path": str(repo_path),
+        "number": int(gh_data.get("number") or 0),
+        "title": gh_data.get("title") or "",
+        "url": url,
+        "draft": bool(gh_data.get("isDraft")),
+        "displayState": display_state(gh_data),
+        "updatedAt": int(time.time()),
+    }
+    marker_path(pane).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Cache PR status for tmux-tabs")
+    subcommands = parser.add_subparsers(dest="command", required=True)
+
+    refresh_parser = subcommands.add_parser("refresh", help="refresh PR status for a pane/path")
+    refresh_parser.add_argument("--pane", help="tmux pane id; defaults to TMUX_PANE")
+    refresh_parser.add_argument("--path", default=os.getcwd(), help="repo path to inspect")
+    refresh_parser.set_defaults(func=refresh)
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
