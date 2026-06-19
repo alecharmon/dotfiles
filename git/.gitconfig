@@ -10,6 +10,9 @@
 	ca = checkout app
 	nb = checkout -b
 	dm = diff main
+	hdiff = -c core.pager="hunk pager" diff
+	hshow = -c core.pager="hunk pager" show
+	hlog = -c core.pager="hunk pager" log -p
 	s = status
 	sync = cm && g fetch origin && g merge origin main
     rename = branch -m

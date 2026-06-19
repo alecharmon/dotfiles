@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pane_path="${1:-$PWD}"
+window_target="${2:-}"
+
+if [ -z "$window_target" ]; then
+    window_target="$(tmux display-message -p '#{window_id}')"
+fi
+
+hunk_pane_id="$(tmux list-panes -t "$window_target" -F '#{pane_id}:#{pane_title}' | awk -F: '$2 == "hunk" { print $1; exit }')"
+
+if [ -n "$hunk_pane_id" ]; then
+    tmux kill-pane -t "$hunk_pane_id"
+    exit 0
+fi
+
+new_pane_id="$(tmux split-window -h -P -F '#{pane_id}' -t "$window_target" -c "$pane_path")"
+tmux select-pane -t "$new_pane_id" -T hunk
+tmux send-keys -t "$new_pane_id" 'hunk diff --watch' C-m
