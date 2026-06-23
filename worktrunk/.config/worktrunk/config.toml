@@ -22,9 +22,10 @@ tmux = "[ -n \"$TMUX\" ] && tmux rename-window {{ branch | sanitize }}"
 [aliases]
 pr = "sh -c 'input=${1:?usage: wt pr <url-or-number>}; clean=${input%%[?#]*}; clean=${clean%/}; n=${clean##*/}; case $n in *[!0-9]*|\"\") echo \"usage: wt pr <url-or-number>\" >&2; exit 2;; esac; exec wt switch pr:$n' -- {{ args }}"
 
-# Warm new worktrees: copy gitignored env vars, deps, and build caches from the
-# source worktree (scoped by the repo's .worktreeinclude). Opt-in per repo — only
-# fires when the primary worktree has a .worktreeinclude, so other repos are
-# unaffected. APFS reflink makes this near-instant and space-free (copy-on-write).
-[pre-start]
+# Warm new worktrees in the background: copy gitignored env vars, deps, and build
+# caches from the source worktree (scoped by the repo's .worktreeinclude). Opt-in
+# per repo — only fires when the primary worktree has a .worktreeinclude, so other
+# repos are unaffected. APFS reflink makes this near-instant and space-free
+# (copy-on-write), and post-start keeps wt switch from blocking on the copy.
+[post-start]
 copy = "test -f {{ primary_worktree_path }}/.worktreeinclude && wt step copy-ignored || true"

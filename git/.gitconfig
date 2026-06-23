@@ -64,6 +64,7 @@
 	excludesFile = ~/.gitignore_global
 	# hooksPath = /Users/alecharmon/.git-templates/hooks
 	pager = delta
+	editor = vim
 [interactive]
 	diffFilter = delta --color-only
 [delta]

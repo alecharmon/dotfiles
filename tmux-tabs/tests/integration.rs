@@ -39,6 +39,12 @@ fn project_group_classifies_paths() {
         "api"
     );
     assert_eq!(project_group("/home/alec/dev/flora", HOME, CWD), "flora");
+    assert_eq!(project_group("/home/alec/worktrees/myrepo", HOME, CWD), "myrepo");
+    assert_eq!(
+        project_group("/home/alec/worktrees/myrepo/sub", HOME, CWD),
+        "myrepo"
+    );
+    assert_eq!(project_group("~/worktrees/zed", HOME, CWD), "zed");
     assert_eq!(project_group("/etc", HOME, CWD), "Other");
     assert_eq!(project_group("~/dev/zed", HOME, CWD), "zed");
 }

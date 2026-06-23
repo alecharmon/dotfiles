@@ -7,8 +7,10 @@ ZSH_THEME="agnoster"
 plugins=(git zsh-fzf-history-search)
 source $ZSH/oh-my-zsh.sh
 
-export EDITOR="code --reuse-window"
+export EDITOR="vim"
 export VISUAL="$EDITOR"
+export GIT_EDITOR="$EDITOR"
+export SUDO_EDITOR="$EDITOR"
 
 # Auto-start tmux on interactive SSH logins (attach "main", else create it).
 # Skips when already inside tmux to avoid nesting.

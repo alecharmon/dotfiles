@@ -131,16 +131,21 @@ pub fn normalize_path(input: &str, home: &str, cwd: &str) -> PathBuf {
 }
 
 /// Map a working directory to its project group, mirroring the Python
-/// `project_group`: paths under `~/dev` group by their first component, with
-/// `~/dev/flora/<x>` grouping by `<x>`. `~/dev` itself is `dev`; anything else
-/// is `Other`.
+/// `project_group`: paths under `~/dev` and `~/worktrees` group by their first
+/// component, with `~/dev/flora/<x>` grouping by `<x>`. The roots themselves
+/// are `dev` and `worktrees`; anything else is `Other`.
 pub fn project_group(path: &str, home: &str, cwd: &str) -> String {
-    let dev_dir = normalize_path("~/dev", home, cwd);
+    let roots = [
+        (normalize_path("~/dev", home, cwd), "dev"),
+        (normalize_path("~/worktrees", home, cwd), "worktrees"),
+    ];
     let abs = normalize_path(path, home, cwd);
 
-    let rel = match abs.strip_prefix(&dev_dir) {
-        Ok(rel) => rel,
-        Err(_) => return "Other".to_string(),
+    let (rel, root_name) = match roots.iter().find_map(|(root, name)| {
+        abs.strip_prefix(root).ok().map(|rel| (rel, *name))
+    }) {
+        Some(found) => found,
+        None => return "Other".to_string(),
     };
 
     let parts: Vec<String> = rel
@@ -152,7 +157,7 @@ pub fn project_group(path: &str, home: &str, cwd: &str) -> String {
         .collect();
 
     if parts.is_empty() {
-        return "dev".to_string();
+        return root_name.to_string();
     }
     if parts[0] == "flora" && parts.len() > 1 && !parts[1].is_empty() {
         return parts[1].clone();
