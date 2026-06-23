@@ -1,0 +1,371 @@
+#!/usr/bin/env python3
+"""Fetch and render PR data for the SketchyBar PR widget."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+GRAPHITE_URL_RE = re.compile(r"https://app\.graphite\.(?:dev|com)/[^\s)\]>\"]+")
+JSON_FIELDS = "number,title,url,createdAt,updatedAt,isDraft,repository,body"
+
+
+def cache_path() -> Path:
+    cache_home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")).expanduser()
+    return cache_home / "dotfiles" / "sketchybar-prs.json"
+
+
+def now_iso(now: datetime | None = None) -> str:
+    return (now or datetime.now(timezone.utc)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_github_time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def format_age(created_at: str, now: datetime | None = None) -> str:
+    current = now or datetime.now(timezone.utc)
+    created = parse_github_time(created_at)
+    seconds = max(0, int((current - created).total_seconds()))
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{max(1, minutes)}m"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours}h"
+    return f"{hours // 24}d"
+
+
+def repo_name(raw: dict[str, Any]) -> str:
+    repo = raw.get("repository") or {}
+    if isinstance(repo, dict):
+        return repo.get("nameWithOwner") or repo.get("fullName") or repo.get("name") or "unknown"
+    return str(repo or "unknown")
+
+
+def iter_values(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from iter_values(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from iter_values(child)
+
+
+def check_state(status_check_rollup: Any) -> str | None:
+    states: set[str] = set()
+    for item in iter_values(status_check_rollup):
+        for key in ("status", "conclusion"):
+            raw = item.get(key) if isinstance(item, dict) else None
+            if isinstance(raw, str) and raw:
+                states.add(raw.upper())
+    if states & {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}:
+        return "ci failed"
+    if states & {"PENDING", "IN_PROGRESS", "QUEUED", "REQUESTED", "WAITING", "EXPECTED"}:
+        return "ci running"
+    if states and states <= {"SUCCESS", "COMPLETED", "SKIPPED", "NEUTRAL"}:
+        return "ready"
+    return None
+
+
+def status_for(raw: dict[str, Any]) -> str:
+    if raw.get("isDraft"):
+        return "draft"
+    checks = check_state(raw.get("statusCheckRollup"))
+    if checks in {"ci failed", "ci running"}:
+        return checks
+    review = str(raw.get("reviewDecision") or "").upper()
+    if review == "CHANGES_REQUESTED":
+        return "changes"
+    if review == "APPROVED":
+        return "ready"
+    if checks == "ready":
+        return "ready"
+    merge_state = str(raw.get("mergeStateStatus") or "").upper()
+    if merge_state in {"BLOCKED", "DIRTY", "UNKNOWN"}:
+        return merge_state.lower().replace("_", " ")
+    return "open"
+
+
+def graphite_url(raw: dict[str, Any]) -> str | None:
+    body = raw.get("body") or ""
+    match = GRAPHITE_URL_RE.search(body)
+    return match.group(0) if match else None
+
+
+def pr_id(raw: dict[str, Any]) -> str:
+    return f"{repo_name(raw)}#{int(raw.get('number') or 0)}"
+
+
+def stack_positions_for(items: list[dict[str, Any]]) -> dict[str, str]:
+    by_repo: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        by_repo.setdefault(repo_name(item), []).append(item)
+
+    positions: dict[str, str] = {}
+    for repo_items in by_repo.values():
+        by_head = {str(item.get("headRefName") or ""): item for item in repo_items if item.get("headRefName")}
+        children_by_base: dict[str, list[dict[str, Any]]] = {}
+        for item in repo_items:
+            base = str(item.get("baseRefName") or "")
+            children_by_base.setdefault(base, []).append(item)
+
+        visited: set[str] = set()
+        roots = [item for item in repo_items if str(item.get("baseRefName") or "") not in by_head]
+        for root in roots:
+            chain = [root]
+            current = root
+            while True:
+                head = str(current.get("headRefName") or "")
+                children = sorted(children_by_base.get(head, []), key=lambda child: int(child.get("number") or 0))
+                next_child = next((child for child in children if pr_id(child) not in visited), None)
+                if next_child is None:
+                    break
+                chain.append(next_child)
+                current = next_child
+                visited.add(pr_id(current))
+            if len(chain) > 1:
+                total = len(chain)
+                for index, item in enumerate(chain, start=1):
+                    positions[pr_id(item)] = f"{index}/{total}"
+    return positions
+
+
+def normalize_pr(raw: dict[str, Any], section: str, stack_positions: dict[str, str] | None = None, now: datetime | None = None) -> dict[str, Any]:
+    repo = repo_name(raw)
+    number = int(raw.get("number") or 0)
+    item_id = f"{repo}#{number}"
+    stack_url = graphite_url(raw)
+    github_url = raw.get("url") or ""
+    stack_position = (stack_positions or {}).get(item_id, "")
+    is_stack = bool(stack_position) or bool(stack_url and "stack" in stack_url.lower())
+    head_ref = raw.get("headRefName") or ""
+    return {
+        "id": item_id,
+        "section": section,
+        "repo": repo,
+        "displayName": head_ref or repo,
+        "number": number,
+        "title": raw.get("title") or "Untitled PR",
+        "age": format_age(raw.get("createdAt") or now_iso(now), now=now),
+        "status": status_for(raw),
+        "githubUrl": github_url,
+        "graphiteUrl": stack_url,
+        "openUrl": stack_url if is_stack and stack_url else github_url,
+        "isStack": is_stack,
+        "stackPosition": stack_position,
+        "headRefName": head_ref,
+        "baseRefName": raw.get("baseRefName") or "",
+        "updatedAt": raw.get("updatedAt") or "",
+    }
+
+
+def build_cache(mine_raw: list[dict[str, Any]], review_raw: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
+    current = now or datetime.now(timezone.utc)
+    stack_positions = stack_positions_for([*mine_raw, *review_raw])
+    mine = [normalize_pr(item, "mine", stack_positions=stack_positions, now=current) for item in mine_raw]
+    seen = {item["id"] for item in mine}
+    reviews = []
+    for item in review_raw:
+        pr = normalize_pr(item, "review", stack_positions=stack_positions, now=current)
+        if pr["id"] not in seen:
+            reviews.append(pr)
+            seen.add(pr["id"])
+    return {
+        "count": len(seen),
+        "updatedAt": now_iso(current),
+        "stale": False,
+        "error": None,
+        "mine": mine,
+        "reviewRequests": reviews,
+    }
+
+
+def empty_cache(error: str | None = None, stale: bool = False) -> dict[str, Any]:
+    return {"count": 0, "updatedAt": None, "stale": stale, "error": error, "mine": [], "reviewRequests": []}
+
+
+def save_cache(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def load_cache(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return empty_cache(f"No PR cache at {path}", stale=True)
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        return empty_cache(f"Invalid PR cache: {exc}", stale=True)
+    return data if isinstance(data, dict) else empty_cache("Invalid PR cache shape", stale=True)
+
+
+def run_json(command: list[str], timeout: int = 30) -> list[dict[str, Any]] | dict[str, Any]:
+    proc = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"command failed: {' '.join(command)}")
+    return json.loads(proc.stdout or "[]")
+
+
+def gh_search(args: list[str]) -> list[dict[str, Any]]:
+    data = run_json(["gh", "search", "prs", "--state", "open", "--limit", "100", "--json", JSON_FIELDS, *args])
+    return data if isinstance(data, list) else []
+
+
+def enrich_pr(raw: dict[str, Any]) -> dict[str, Any]:
+    url = raw.get("url")
+    if not url:
+        return raw
+    try:
+        data = run_json(["gh", "pr", "view", str(url), "--json", "reviewDecision,statusCheckRollup,mergeStateStatus,isDraft,headRefName,baseRefName"], timeout=10)
+    except Exception:
+        return raw
+    if isinstance(data, dict):
+        enriched = dict(raw)
+        enriched.update(data)
+        return enriched
+    return raw
+
+
+def enrich_many(items: list[dict[str, Any]], enricher=enrich_pr, max_workers: int = 8) -> list[dict[str, Any]]:
+    if not items:
+        return []
+    workers = max(1, min(max_workers, len(items)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        return list(executor.map(enricher, items))
+
+
+def lock_path(path: Path) -> Path:
+    return path.with_suffix(path.suffix + ".lock")
+
+
+def acquire_lock(path: Path) -> int | None:
+    lock = lock_path(path)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        try:
+            if time.time() - lock.stat().st_mtime > 120:
+                lock.unlink()
+                return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except OSError:
+            pass
+        return None
+
+
+def release_lock(path: Path, fd: int) -> None:
+    os.close(fd)
+    lock_path(path).unlink(missing_ok=True)
+
+
+def refresh_cache(path: Path) -> dict[str, Any]:
+    lock_fd = acquire_lock(path)
+    if lock_fd is None:
+        data = load_cache(path)
+        data["stale"] = True
+        data["error"] = "Refresh already running"
+        return data
+    try:
+        mine = enrich_many(gh_search(["--author", "@me", "--sort", "updated", "--order", "desc"]))
+        reviews = enrich_many(gh_search(["--review-requested", "@me", "--sort", "updated", "--order", "desc"]))
+        data = build_cache(mine, reviews)
+        save_cache(path, data)
+        return data
+    finally:
+        release_lock(path, lock_fd)
+
+
+def command_refresh(args: argparse.Namespace) -> int:
+    path = Path(args.cache) if args.cache else cache_path()
+    try:
+        data = refresh_cache(path)
+    except Exception as exc:
+        previous = load_cache(path)
+        previous["stale"] = True
+        previous["error"] = str(exc)
+        save_cache(path, previous)
+        print(json.dumps(previous))
+        return 1
+    print(json.dumps(data))
+    return 0
+
+
+def clean_field(value: Any) -> str:
+    return str(value or "").replace("\t", " ").replace("\n", " ").strip()
+
+
+def render_summary(data: dict[str, Any]) -> str:
+    state = "error" if data.get("error") else "stale" if data.get("stale") else "ok"
+    return f"{int(data.get('count') or 0)}\t{state}"
+
+
+def render_tsv(data: dict[str, Any]) -> str:
+    lines = []
+    for section_key, section_name in (("mine", "mine"), ("reviewRequests", "review")):
+        for pr in data.get(section_key) or []:
+            fields = [
+                section_name,
+                clean_field(pr.get("displayName") or pr.get("repo")),
+                clean_field(pr.get("age")),
+                clean_field(pr.get("status")),
+                clean_field(pr.get("title")),
+                clean_field(pr.get("openUrl")),
+                "true" if pr.get("isStack") else "false",
+                clean_field(pr.get("stackPosition")),
+            ]
+            lines.append("\t".join(fields))
+    if data.get("error") and not lines:
+        lines.append("error\tPR widget\t--\terror\t" + clean_field(data.get("error")) + "\t\tfalse")
+    return "\n".join(lines)
+
+
+def command_render(args: argparse.Namespace) -> int:
+    path = Path(args.cache) if args.cache else cache_path()
+    data = load_cache(path)
+    if args.format == "json":
+        print(json.dumps(data))
+    elif args.format == "summary":
+        print(render_summary(data))
+    else:
+        print(render_tsv(data))
+    return 0
+
+
+def command_cache_path(args: argparse.Namespace) -> int:
+    print(cache_path())
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Fetch/render SketchyBar PR widget data")
+    subcommands = parser.add_subparsers(dest="command", required=True)
+    refresh = subcommands.add_parser("refresh")
+    refresh.add_argument("--cache")
+    refresh.set_defaults(func=command_refresh)
+
+    render = subcommands.add_parser("render")
+    render.add_argument("--cache")
+    render.add_argument("--format", choices=("json", "summary", "tsv"), default="json")
+    render.set_defaults(func=command_render)
+    subcommands.add_parser("cache-path").set_defaults(func=command_cache_path)
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
