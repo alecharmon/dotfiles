@@ -4,7 +4,7 @@ aerospace list-windows --all --format '%{app-bundle-id}|%{window-id}' | while IF
     case "$app_id" in
         com.mitchellh.ghostty)
             aerospace move-node-to-workspace --window-id "$window_id" 1 ;;
-        com.microsoft.VSCode)
+        com.microsoft.VSCode|dev.zed.Zed)
             aerospace move-node-to-workspace --window-id "$window_id" 2 ;;
         company.thebrowser.Browser)
             aerospace move-node-to-workspace --window-id "$window_id" 3 ;;

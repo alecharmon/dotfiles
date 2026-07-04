@@ -8,7 +8,11 @@ config-version = 2
 # You can use it to add commands that run after AeroSpace startup.
 # Available commands : https://nikitabobko.github.io/AeroSpace/commands
 after-startup-command = [
-  'exec-and-forget borders active_color=0xffe1e3e4 inactive_color=0x00000000 width=5.0'
+  'exec-and-forget borders active_color=0xffe1e3e4 inactive_color=0x00000000 width=5.0',
+  # Rebuild SketchyBar once AeroSpace is up: spaces.lua builds space items once at
+  # load from `aerospace list-workspaces`. If SketchyBar starts first at login that
+  # list is empty and no spaces are ever drawn. Reloading here fixes the race.
+  'exec-and-forget sketchybar --reload'
 ]
 
 # Start AeroSpace at login
@@ -215,6 +219,11 @@ run = 'move-node-to-workspace 1'
 
 [[on-window-detected]]
 if.app-id = 'com.microsoft.VSCode'
+if.during-aerospace-startup = true
+run = 'move-node-to-workspace 2'
+
+[[on-window-detected]]
+if.app-id = 'dev.zed.Zed'
 if.during-aerospace-startup = true
 run = 'move-node-to-workspace 2'
 
