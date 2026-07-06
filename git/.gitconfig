@@ -90,6 +90,7 @@
 [credential "https://gist.github.com"]
 	helper =
 	helper = !/opt/homebrew/bin/gh auth git-credential
-[user]
-	name = alecharmon
-	email = alec@buildwithfern.com
+# Machine-local identity (name/email/signingkey) — not tracked in git.
+# See git/.gitconfig.local.example for the template.
+[include]
+	path = ~/.gitconfig.local

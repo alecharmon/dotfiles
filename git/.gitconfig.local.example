@@ -1,0 +1,6 @@
+# Copy this to ~/.gitconfig.local and fill in your own identity.
+# It is included by ~/.gitconfig and is intentionally NOT tracked in git.
+[user]
+	name = Your Name
+	email = you@example.com
+	# signingkey = <your key>
