@@ -43,12 +43,7 @@ impl VisualLine {
 }
 
 /// Build the full visual-line layout for the sidebar.
-pub fn build_lines(
-    windows: &[Window],
-    menu_window: &str,
-    confirm_kill: bool,
-    width: usize,
-) -> Vec<VisualLine> {
+pub fn build_lines(windows: &[Window], menu_window: &str, width: usize) -> Vec<VisualLine> {
     let w = Some(width);
     let mut lines: Vec<VisualLine> = Vec::new();
     lines.push(VisualLine::blank()); // top padding
@@ -112,7 +107,7 @@ pub fn build_lines(
                     .as_ref()
                     .map(|pr| !pr.url.is_empty())
                     .unwrap_or(false);
-                for action in action_menu_labels(confirm_kill, has_pr_url) {
+                for action in action_menu_labels(has_pr_url) {
                     lines.push(VisualLine {
                         text: format!("   {action}"),
                         style: LineStyle::Action,

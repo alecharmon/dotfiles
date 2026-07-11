@@ -180,7 +180,7 @@ fn three_window_state() -> State {
 #[test]
 fn layout_targets_map_back_to_windows() {
     let s = three_window_state();
-    let lines = build_lines(&s.windows, "", false, s.width);
+    let lines = build_lines(&s.windows, "", s.width);
     // Every window-name line should target SwitchTo with its index.
     let switch_targets: Vec<String> = lines
         .iter()
@@ -236,36 +236,33 @@ fn right_click_opens_and_toggles_action_menu() {
 }
 
 #[test]
-fn action_menu_kill_requires_confirmation() {
+fn action_menu_kill_kills_immediately() {
     let mut s = three_window_state();
     s.menu_window = "2".into();
 
-    let kill_row = |s: &State| {
-        s.lines()
-            .iter()
-            .position(
-                |l| matches!(&l.target, Some(Target::RunAction { action, .. }) if action == "kill"),
-            )
-            .unwrap() as u16
-    };
-    // First "kill" click only arms confirmation, no external action.
-    let kr = kill_row(&s);
-    let actions = handle_event(&mut s, Event::Click { row: kr });
-    assert!(actions.is_empty());
-    assert!(s.confirm_kill);
-
-    // Now a "confirm kill" item exists.
-    let confirm_row = s
+    let kill_row = s
         .lines()
         .iter()
-        .position(|l| {
-            matches!(&l.target, Some(Target::RunAction { action, .. }) if action == "confirm kill")
-        })
+        .position(
+            |l| matches!(&l.target, Some(Target::RunAction { action, .. }) if action == "kill"),
+        )
         .unwrap() as u16;
-    let actions = handle_event(&mut s, Event::Click { row: confirm_row });
+    let actions = handle_event(&mut s, Event::Click { row: kill_row });
     assert_eq!(actions, vec![Action::KillWindow("2".into())]);
     assert_eq!(s.menu_window, "");
-    assert!(!s.confirm_kill);
+}
+
+#[test]
+fn action_menu_kill_with_worktree_emits_action() {
+    let mut s = three_window_state();
+    s.menu_window = "2".into();
+
+    let r = row_of_action(&s, "kill + rm worktree").unwrap();
+    assert_eq!(
+        handle_event(&mut s, Event::Click { row: r }),
+        vec![Action::KillWindowAndWorktree("2".into())]
+    );
+    assert_eq!(s.menu_window, "");
 }
 
 fn row_of_action(s: &State, action: &str) -> Option<u16> {
@@ -380,7 +377,7 @@ fn layout_marks_draft_pr_detail_line() {
 }
 
 #[test]
-fn clicking_pr_detail_line_opens_pr() {
+fn single_click_on_pr_detail_line_switches_window() {
     let mut s = three_window_state();
     s.windows[0].pr = Some(PullRequestStatus {
         number: 42,
@@ -396,7 +393,32 @@ fn clicking_pr_detail_line_opens_pr() {
         .position(|l| l.text == "   ● PR #42 ready")
         .unwrap() as u16;
 
-    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::OpenPr("1".into())]);
+    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::SwitchTo("1".into())]);
+}
+
+#[test]
+fn double_click_on_pr_detail_line_opens_pr() {
+    let mut s = three_window_state();
+    s.windows[0].pr = Some(PullRequestStatus {
+        number: 42,
+        title: "Show PRs".into(),
+        url: "https://github.com/example/repo/pull/42".into(),
+        draft: false,
+        state: PrState::Ready,
+    });
+
+    let row = s
+        .lines()
+        .iter()
+        .position(|l| l.text == "   ● PR #42 ready")
+        .unwrap() as u16;
+
+    assert_eq!(
+        handle_event(&mut s, Event::DoubleClick { row }),
+        vec![Action::OpenPr("1".into())]
+    );
+    // Double-clicking a non-PR row does nothing.
+    assert!(handle_event(&mut s, Event::DoubleClick { row: 0 }).is_empty());
 }
 
 #[test]

@@ -92,7 +92,8 @@ cargo test --test e2e            # spawns a real tmux server + this binary
 
 - **Integration tests** drive the pure reducer and model directly: clicks switch
   windows, the wheel moves the viewport (with bounds), right-click toggles the
-  action menu, kill requires confirmation, grouping/width are correct.
+  action menu, kill fires immediately, double-click opens PRs, grouping/width
+  are correct.
 - **End-to-end tests** start an isolated tmux server, launch the real binary in a
   split, and inject genuine SGR mouse sequences (`tmux send-keys -H`) for clicks,
   scrolling, and right-clicks — asserting the active window changes, the viewport

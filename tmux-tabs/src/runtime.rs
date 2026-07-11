@@ -27,11 +27,12 @@ use unicode_width::UnicodeWidthStr;
 use crate::app::{handle_event, Action, Event, State};
 use crate::control::move_sidebar_to_window;
 use crate::layout::LineStyle;
-use crate::model::{pr_refresh_targets, PrState};
+use crate::model::{adjacent_sidebar_window, pr_refresh_targets, Direction, PrState};
 use crate::theme::{load_theme, Theme};
 use crate::tmux::{clear_ready_panes, display, pane_var, tmux_windows, Ctx, RealTmux, Tmux};
 
 const TICK: Duration = Duration::from_millis(200);
+const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const REFRESH: Duration = Duration::from_secs(1);
 const PR_REFRESH: Duration = Duration::from_secs(60);
 
@@ -174,8 +175,22 @@ impl Runtime {
                 ]);
             }
             Action::KillWindow(index) => {
-                let _ = self.t.run(&["kill-window", "-t", &index]);
-                self.refresh_windows(term);
+                self.kill_window(&index, term);
+            }
+            Action::KillWindowAndWorktree(index) => {
+                let path = self
+                    .state
+                    .windows
+                    .iter()
+                    .find(|w| w.index == index)
+                    .map(|w| w.path.clone())
+                    .unwrap_or_default();
+                self.kill_window(&index, term);
+                if !path.is_empty() {
+                    std::thread::spawn(move || {
+                        let _ = Command::new("wt").args(["-C", &path, "remove"]).status();
+                    });
+                }
             }
             Action::ClearReady(index) => {
                 clear_ready_panes(&self.ctx, &self.window_panes(&index));
@@ -191,6 +206,26 @@ impl Runtime {
             }
         }
         false
+    }
+
+    /// Kill `index`, moving the sidebar pane out first when it lives there so
+    /// killing the current window doesn't take the sidebar with it.
+    fn kill_window(&mut self, index: &str, term: &Term) {
+        if index == self.state.current_window {
+            let next = adjacent_sidebar_window(&self.state.windows, index, Direction::Prev);
+            if !next.is_empty() && next != index {
+                move_sidebar_to_window(
+                    &self.t,
+                    &self.ctx,
+                    &self.pane_id,
+                    &next,
+                    &self.state.windows,
+                );
+                self.state.current_window = next;
+            }
+        }
+        let _ = self.t.run(&["kill-window", "-t", index]);
+        self.refresh_windows(term);
     }
 
     /// Follow focus: if the active window drifted away, move the sidebar to it.
@@ -246,9 +281,21 @@ impl Runtime {
         self.draw(term)?;
         let mut last_refresh = Instant::now();
         let mut last_pr_refresh = Instant::now();
+        let mut last_click: Option<(Instant, u16)> = None;
         loop {
             if event::poll(TICK)? {
-                if let Some(ev) = translate(event::read()?) {
+                if let Some(mut ev) = translate(event::read()?) {
+                    if let Event::Click { row } = ev {
+                        let now = Instant::now();
+                        let is_double = matches!(last_click, Some((t, r))
+                            if r == row && now.duration_since(t) < DOUBLE_CLICK);
+                        if is_double {
+                            ev = Event::DoubleClick { row };
+                            last_click = None;
+                        } else {
+                            last_click = Some((now, row));
+                        }
+                    }
                     let actions = handle_event(&mut self.state, ev);
                     for action in actions {
                         if self.perform(action, term) {

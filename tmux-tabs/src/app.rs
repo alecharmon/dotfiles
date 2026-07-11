@@ -14,6 +14,10 @@ pub enum Event {
     Click {
         row: u16,
     },
+    /// Second left-button press on the same row within the double-click window.
+    DoubleClick {
+        row: u16,
+    },
     /// Right or middle button press at 0-based row.
     RightClick {
         row: u16,
@@ -29,6 +33,8 @@ pub enum Action {
     SwitchTo(String),
     Rename(String),
     KillWindow(String),
+    /// Kill the window, then `wt remove` its worktree.
+    KillWindowAndWorktree(String),
     ClearReady(String),
     OpenPr(String),
     RefreshPr(String),
@@ -39,7 +45,6 @@ pub enum Action {
 pub struct State {
     pub windows: Vec<crate::model::Window>,
     pub menu_window: String,
-    pub confirm_kill: bool,
     pub width: usize,
     pub height: usize,
     pub scroll: usize,
@@ -48,12 +53,7 @@ pub struct State {
 
 impl State {
     pub fn lines(&self) -> Vec<VisualLine> {
-        build_lines(
-            &self.windows,
-            &self.menu_window,
-            self.confirm_kill,
-            self.width,
-        )
+        build_lines(&self.windows, &self.menu_window, self.width)
     }
 
     /// Largest valid scroll offset given current content and viewport height.
@@ -73,18 +73,16 @@ impl State {
         if !self.menu_window.is_empty() && !self.windows.iter().any(|w| w.index == self.menu_window)
         {
             self.menu_window.clear();
-            self.confirm_kill = false;
         }
         self.clamp_scroll();
     }
 
     fn open_action_menu(&mut self, index: &str) {
-        if self.menu_window == index && !self.confirm_kill {
+        if self.menu_window == index {
             self.menu_window.clear();
             return;
         }
         self.menu_window = index.to_string();
-        self.confirm_kill = false;
     }
 
     fn run_window_action(&mut self, index: &str, action: &str, out: &mut Vec<Action>) {
@@ -102,20 +100,16 @@ impl State {
                 self.menu_window.clear();
             }
             "kill" => {
-                self.confirm_kill = true;
-            }
-            "confirm kill" => {
                 out.push(Action::KillWindow(index.to_string()));
                 self.menu_window.clear();
-                self.confirm_kill = false;
+            }
+            "kill + rm worktree" => {
+                out.push(Action::KillWindowAndWorktree(index.to_string()));
+                self.menu_window.clear();
             }
             "clear ready" => {
                 out.push(Action::ClearReady(index.to_string()));
                 self.menu_window.clear();
-            }
-            "cancel" => {
-                self.menu_window.clear();
-                self.confirm_kill = false;
             }
             _ => {}
         }
@@ -139,17 +133,21 @@ pub fn handle_event(state: &mut State, event: Event) -> Vec<Action> {
             let idx = state.scroll + row as usize;
             let lines = state.lines();
             match lines.get(idx).and_then(|l| l.target.clone()) {
-                Some(Target::SwitchTo(index)) => {
+                Some(Target::SwitchTo(index)) | Some(Target::OpenPr(index)) => {
                     state.current_window = index.clone();
                     out.push(Action::SwitchTo(index));
-                }
-                Some(Target::OpenPr(index)) => {
-                    out.push(Action::OpenPr(index));
                 }
                 Some(Target::RunAction { index, action }) => {
                     state.run_window_action(&index, &action, &mut out);
                 }
                 None => {}
+            }
+        }
+        Event::DoubleClick { row } => {
+            let idx = state.scroll + row as usize;
+            if let Some(Target::OpenPr(index)) = state.lines().get(idx).and_then(|l| l.target.clone())
+            {
+                out.push(Action::OpenPr(index));
             }
         }
         Event::RightClick { row } => {

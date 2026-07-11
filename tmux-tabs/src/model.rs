@@ -320,12 +320,10 @@ pub fn window_icon(w: &Window) -> &'static str {
 }
 
 /// Action menu labels for a window (mirrors `action_menu_labels`).
-pub fn action_menu_labels(confirm_kill: bool, has_pr_url: bool) -> Vec<&'static str> {
-    if confirm_kill {
-        vec!["confirm kill", "cancel"]
-    } else if has_pr_url {
-        vec!["open PR", "refresh PR", "rename", "kill", "clear ready"]
+pub fn action_menu_labels(has_pr_url: bool) -> Vec<&'static str> {
+    if has_pr_url {
+        vec!["open PR", "refresh PR", "rename", "kill", "kill + rm worktree", "clear ready"]
     } else {
-        vec!["refresh PR", "rename", "kill", "clear ready"]
+        vec!["refresh PR", "rename", "kill", "kill + rm worktree", "clear ready"]
     }
 }
