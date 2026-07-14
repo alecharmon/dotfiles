@@ -252,6 +252,11 @@ run = 'layout floating'
 if.app-id = 'org.videolan.vlc'
 run = 'layout floating'
 
+# Messages: always floating
+[[on-window-detected]]
+if.app-id = 'com.apple.MobileSMS'
+run = 'layout floating'
+
 # Hover terminal: float Ghostty windows titled "hover-terminal" on workspace 9
 # (This rule is checked first due to the window-title match, overriding the general Ghostty rule above)
 [[on-window-detected]]
