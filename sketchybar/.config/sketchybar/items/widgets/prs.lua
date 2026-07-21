@@ -2,7 +2,7 @@ local colors = require("colors")
 local settings = require("settings")
 
 local script = os.getenv("SKETCHYBAR_PRS_SCRIPT") or (os.getenv("HOME") .. "/dev/dotfiles/scripts/sketchybar-prs")
-local max_rows_per_section = 8
+local max_rows_per_section = 16
 
 local function shell_quote(value)
     return "'" .. tostring(value or ""):gsub("'", "'\\''") .. "'"
@@ -67,6 +67,17 @@ local refresh = sbar.add("item", {
     label = { string = "Refresh PRs", width = 520, align = "left" }
 })
 
+local child_rows_by_parent = {}
+local row_ids = {}
+
+local function hide_child_rows()
+    for _, rows in pairs(child_rows_by_parent) do
+        for _, row in ipairs(rows) do
+            row:set({ drawing = false })
+        end
+    end
+end
+
 local mine_header = sbar.add("item", {
     position = "popup." .. prs.name,
     icon = { drawing = false },
@@ -75,13 +86,23 @@ local mine_header = sbar.add("item", {
 
 local mine_rows = {}
 for i = 1, max_rows_per_section do
-    mine_rows[i] = sbar.add("item", {
+    local row = sbar.add("item", {
         position = "popup." .. prs.name,
         drawing = false,
         icon = { drawing = false },
         label = { width = 520, align = "left", max_chars = 100 },
         click_script = "true"
     })
+    mine_rows[i] = row
+    row:subscribe("mouse.entered", function(_)
+        local row_id = row_ids[row]
+        if row_id and child_rows_by_parent[row_id] then
+            hide_child_rows()
+            for _, child in ipairs(child_rows_by_parent[row_id]) do
+                child:set({ drawing = true })
+            end
+        end
+    end)
 end
 
 local review_header = sbar.add("item", {
@@ -92,13 +113,23 @@ local review_header = sbar.add("item", {
 
 local review_rows = {}
 for i = 1, max_rows_per_section do
-    review_rows[i] = sbar.add("item", {
+    local row = sbar.add("item", {
         position = "popup." .. prs.name,
         drawing = false,
         icon = { drawing = false },
         label = { width = 520, align = "left", max_chars = 100 },
         click_script = "true"
     })
+    review_rows[i] = row
+    row:subscribe("mouse.entered", function(_)
+        local row_id = row_ids[row]
+        if row_id and child_rows_by_parent[row_id] then
+            hide_child_rows()
+            for _, child in ipairs(child_rows_by_parent[row_id]) do
+                child:set({ drawing = true })
+            end
+        end
+    end)
 end
 
 local empty_row = sbar.add("item", {
@@ -134,26 +165,36 @@ local function render_summary()
     end)
 end
 
-local function set_row(row, display_name, age, status, title, url, is_stack, stack_position)
+local function set_row(row, display_name, age, status, title, url, is_stack, stack_position, role, row_id, parent_id)
     local icon = is_stack and "󰓾" or ""
     local label = display_name .. " · " .. age .. " · " .. status .. " · " .. title
     if is_stack and stack_position ~= "" then
         label = stack_position .. " · " .. label
     end
+    if role == "child" then
+        label = "  ↳ " .. label
+    end
     local click_script = "true"
     if url ~= "" then
         click_script = "open " .. shell_quote(url)
     end
+    local drawing = role ~= "child"
     row:set({
-        drawing = true,
+        drawing = drawing,
         icon = { string = icon, drawing = true, color = is_stack and colors.magenta or colors.white },
         label = { string = label },
         click_script = click_script
     })
+    row_ids[row] = role == "base" and row_id or nil
+    if role == "child" and parent_id ~= "" then
+        child_rows_by_parent[parent_id] = child_rows_by_parent[parent_id] or {}
+        table.insert(child_rows_by_parent[parent_id], row)
+    end
 end
 
 local function hide_unused(rows, start_index)
     for i = start_index, max_rows_per_section do
+        row_ids[rows[i]] = nil
         rows[i]:set({ drawing = false, click_script = "true" })
     end
 end
@@ -165,6 +206,8 @@ local function render_popup()
         local review_shown = 0
         local has_mine = false
         local has_review = false
+        child_rows_by_parent = {}
+        row_ids = {}
 
         for _, line in ipairs(lines) do
             local fields = split_tabs(line)
@@ -176,18 +219,21 @@ local function render_popup()
             local url = fields[6] or ""
             local is_stack = fields[7] == "true"
             local stack_position = fields[8] or ""
+            local role = fields[9] or "single"
+            local row_id = fields[10] or ""
+            local parent_id = fields[11] or ""
 
             if section == "mine" then
                 has_mine = true
                 if mine_shown < max_rows_per_section then
                     mine_shown = mine_shown + 1
-                    set_row(mine_rows[mine_shown], display_name, age, status, title, url, is_stack, stack_position)
+                    set_row(mine_rows[mine_shown], display_name, age, status, title, url, is_stack, stack_position, role, row_id, parent_id)
                 end
             elseif section == "review" then
                 has_review = true
                 if review_shown < max_rows_per_section then
                     review_shown = review_shown + 1
-                    set_row(review_rows[review_shown], display_name, age, status, title, url, is_stack, stack_position)
+                    set_row(review_rows[review_shown], display_name, age, status, title, url, is_stack, stack_position, role, row_id, parent_id)
                 end
             end
         end

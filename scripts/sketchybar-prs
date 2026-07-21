@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-GRAPHITE_URL_RE = re.compile(r"https://app\.graphite\.(?:dev|com)/[^\s)\]>\"]+")
 JSON_FIELDS = "number,title,url,createdAt,updatedAt,isDraft,repository,body"
 
 
@@ -97,22 +96,53 @@ def status_for(raw: dict[str, Any]) -> str:
     return "open"
 
 
-def graphite_url(raw: dict[str, Any]) -> str | None:
-    body = raw.get("body") or ""
-    match = GRAPHITE_URL_RE.search(body)
-    return match.group(0) if match else None
-
-
 def pr_id(raw: dict[str, Any]) -> str:
     return f"{repo_name(raw)}#{int(raw.get('number') or 0)}"
 
 
-def stack_positions_for(items: list[dict[str, Any]]) -> dict[str, str]:
+def pr_id_from_url(url: str) -> str | None:
+    match = re.search(r"https://github\.com/([^/]+/[^/]+)/pull/(\d+)", url or "")
+    if not match:
+        return None
+    return f"{match.group(1)}#{match.group(2)}"
+
+
+def gh_stack_metadata_from_view(view: dict[str, Any], known_ids: set[str]) -> dict[str, dict[str, str]]:
+    branches = view.get("branches") if isinstance(view, dict) else None
+    if not isinstance(branches, list) or len(branches) < 2:
+        return {}
+    ids: list[str] = []
+    for branch in branches:
+        pr = branch.get("pr") if isinstance(branch, dict) else None
+        if not isinstance(pr, dict):
+            continue
+        item_id = pr_id_from_url(str(pr.get("url") or ""))
+        if item_id and item_id in known_ids:
+            ids.append(item_id)
+    if len(ids) < 2:
+        return {}
+    root_id = ids[0]
+    total = len(ids)
+    return {item_id: {"position": f"{index}/{total}", "rootId": root_id} for index, item_id in enumerate(ids, start=1)}
+
+
+def gh_stack_metadata_for(items: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    known_ids = {pr_id(item) for item in items}
+    try:
+        data = run_json(["gh", "stack", "view", "--json"], timeout=10)
+    except Exception:
+        return {}
+    if isinstance(data, dict):
+        return gh_stack_metadata_from_view(data, known_ids)
+    return {}
+
+
+def stack_metadata_for(items: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     by_repo: dict[str, list[dict[str, Any]]] = {}
     for item in items:
         by_repo.setdefault(repo_name(item), []).append(item)
 
-    positions: dict[str, str] = {}
+    metadata: dict[str, dict[str, str]] = {}
     for repo_items in by_repo.values():
         by_head = {str(item.get("headRefName") or ""): item for item in repo_items if item.get("headRefName")}
         children_by_base: dict[str, list[dict[str, Any]]] = {}
@@ -122,8 +152,11 @@ def stack_positions_for(items: list[dict[str, Any]]) -> dict[str, str]:
 
         visited: set[str] = set()
         roots = [item for item in repo_items if str(item.get("baseRefName") or "") not in by_head]
-        for root in roots:
+        for root in sorted(roots, key=lambda item: int(item.get("number") or 0)):
+            if pr_id(root) in visited:
+                continue
             chain = [root]
+            visited.add(pr_id(root))
             current = root
             while True:
                 head = str(current.get("headRefName") or "")
@@ -136,19 +169,24 @@ def stack_positions_for(items: list[dict[str, Any]]) -> dict[str, str]:
                 visited.add(pr_id(current))
             if len(chain) > 1:
                 total = len(chain)
+                root_id = pr_id(chain[0])
                 for index, item in enumerate(chain, start=1):
-                    positions[pr_id(item)] = f"{index}/{total}"
-    return positions
+                    metadata[pr_id(item)] = {"position": f"{index}/{total}", "rootId": root_id}
+    return metadata
 
 
-def normalize_pr(raw: dict[str, Any], section: str, stack_positions: dict[str, str] | None = None, now: datetime | None = None) -> dict[str, Any]:
+def stack_positions_for(items: list[dict[str, Any]]) -> dict[str, str]:
+    return {item_id: meta["position"] for item_id, meta in stack_metadata_for(items).items()}
+
+
+def normalize_pr(raw: dict[str, Any], section: str, stack_metadata: dict[str, dict[str, str]] | None = None, now: datetime | None = None) -> dict[str, Any]:
     repo = repo_name(raw)
     number = int(raw.get("number") or 0)
     item_id = f"{repo}#{number}"
-    stack_url = graphite_url(raw)
     github_url = raw.get("url") or ""
-    stack_position = (stack_positions or {}).get(item_id, "")
-    is_stack = bool(stack_position) or bool(stack_url and "stack" in stack_url.lower())
+    stack_info = (stack_metadata or {}).get(item_id, {})
+    stack_position = stack_info.get("position", "")
+    is_stack = bool(stack_position)
     head_ref = raw.get("headRefName") or ""
     return {
         "id": item_id,
@@ -160,27 +198,53 @@ def normalize_pr(raw: dict[str, Any], section: str, stack_positions: dict[str, s
         "age": format_age(raw.get("createdAt") or now_iso(now), now=now),
         "status": status_for(raw),
         "githubUrl": github_url,
-        "graphiteUrl": stack_url,
-        "openUrl": stack_url if is_stack and stack_url else github_url,
+        "openUrl": github_url,
         "isStack": is_stack,
         "stackPosition": stack_position,
+        "stackRootId": stack_info.get("rootId", ""),
+        "children": [],
         "headRefName": head_ref,
         "baseRefName": raw.get("baseRefName") or "",
         "updatedAt": raw.get("updatedAt") or "",
     }
 
 
+def collapse_stack_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_id = {item["id"]: item for item in items}
+    collapsed: list[dict[str, Any]] = []
+    hidden_children: set[str] = set()
+
+    for item in items:
+        root_id = item.get("stackRootId") or ""
+        if root_id and root_id != item["id"] and root_id in by_id:
+            by_id[root_id].setdefault("children", []).append(item)
+            hidden_children.add(item["id"])
+
+    for item in items:
+        if item["id"] not in hidden_children:
+            item["children"] = sorted(
+                item.get("children") or [],
+                key=lambda child: int(str(child.get("stackPosition") or "0/0").split("/", 1)[0] or 0),
+            )
+            collapsed.append(item)
+    return collapsed
+
+
 def build_cache(mine_raw: list[dict[str, Any]], review_raw: list[dict[str, Any]], now: datetime | None = None) -> dict[str, Any]:
     current = now or datetime.now(timezone.utc)
-    stack_positions = stack_positions_for([*mine_raw, *review_raw])
-    mine = [normalize_pr(item, "mine", stack_positions=stack_positions, now=current) for item in mine_raw]
-    seen = {item["id"] for item in mine}
-    reviews = []
+    all_raw = [*mine_raw, *review_raw]
+    stack_metadata = stack_metadata_for(all_raw)
+    stack_metadata.update(gh_stack_metadata_for(all_raw))
+    mine_all = [normalize_pr(item, "mine", stack_metadata=stack_metadata, now=current) for item in mine_raw]
+    seen = {item["id"] for item in mine_all}
+    review_all = []
     for item in review_raw:
-        pr = normalize_pr(item, "review", stack_positions=stack_positions, now=current)
+        pr = normalize_pr(item, "review", stack_metadata=stack_metadata, now=current)
         if pr["id"] not in seen:
-            reviews.append(pr)
+            review_all.append(pr)
             seen.add(pr["id"])
+    mine = collapse_stack_rows(mine_all)
+    reviews = collapse_stack_rows(review_all)
     return {
         "count": len(seen),
         "updatedAt": now_iso(current),
@@ -310,21 +374,31 @@ def render_summary(data: dict[str, Any]) -> str:
     return f"{int(data.get('count') or 0)}\t{state}"
 
 
+def render_pr_tsv_line(section_name: str, pr: dict[str, Any], role: str, parent_id: str = "") -> str:
+    fields = [
+        section_name,
+        clean_field(pr.get("displayName") or pr.get("repo")),
+        clean_field(pr.get("age")),
+        clean_field(pr.get("status")),
+        clean_field(pr.get("title")),
+        clean_field(pr.get("openUrl")),
+        "true" if pr.get("isStack") else "false",
+        clean_field(pr.get("stackPosition")),
+        role,
+        clean_field(pr.get("id")),
+        clean_field(parent_id),
+    ]
+    return "\t".join(fields)
+
+
 def render_tsv(data: dict[str, Any]) -> str:
     lines = []
     for section_key, section_name in (("mine", "mine"), ("reviewRequests", "review")):
         for pr in data.get(section_key) or []:
-            fields = [
-                section_name,
-                clean_field(pr.get("displayName") or pr.get("repo")),
-                clean_field(pr.get("age")),
-                clean_field(pr.get("status")),
-                clean_field(pr.get("title")),
-                clean_field(pr.get("openUrl")),
-                "true" if pr.get("isStack") else "false",
-                clean_field(pr.get("stackPosition")),
-            ]
-            lines.append("\t".join(fields))
+            role = "base" if pr.get("children") else "single"
+            lines.append(render_pr_tsv_line(section_name, pr, role))
+            for child in pr.get("children") or []:
+                lines.append(render_pr_tsv_line(section_name, child, "child", parent_id=pr.get("id") or ""))
     if data.get("error") and not lines:
         lines.append("error\tPR widget\t--\terror\t" + clean_field(data.get("error")) + "\t\tfalse")
     return "\n".join(lines)

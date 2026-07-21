@@ -43,8 +43,8 @@ grep -Fx 'select-pane -t %9 -T hunk' "$LOG" >/dev/null || {
   cat "$LOG" >&2
   exit 1
 }
-grep -Fx 'send-keys -t %9 hunk diff --watch C-m' "$LOG" >/dev/null || {
-  echo "expected script to run hunk in the interactive split" >&2
+grep -Fx 'send-keys -t %9 hunk diff "$(git merge-base "${HUNK_BASE_REF:-main}" HEAD)" --watch C-m' "$LOG" >/dev/null || {
+  echo "expected script to run hunk against the branch merge-base in the interactive split" >&2
   cat "$LOG" >&2
   exit 1
 }

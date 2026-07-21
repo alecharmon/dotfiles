@@ -54,25 +54,36 @@ class SketchybarPrsTests(unittest.TestCase):
         self.assertEqual([p["id"] for p in cache["mine"]], ["acme/a#1"])
         self.assertEqual([p["id"] for p in cache["reviewRequests"]], ["acme/b#2"])
 
-    def test_build_cache_marks_branch_chains_as_stacks_and_opens_graphite(self):
+    def test_build_cache_collapses_branch_chains_to_base_and_ignores_graphite(self):
         mine = [
             {"number": 1, "title": "Bottom", "url": "https://github.com/acme/a/pull/1", "body": "Graphite PR: https://app.graphite.com/github/pr/acme/a/1", "createdAt": "2026-06-22T12:00:00Z", "updatedAt": "2026-06-22T12:00:00Z", "isDraft": False, "headRefName": "bottom", "baseRefName": "main", "repository": {"nameWithOwner": "acme/a"}},
             {"number": 2, "title": "Top", "url": "https://github.com/acme/a/pull/2", "body": "Graphite PR: https://app.graphite.com/github/pr/acme/a/2", "createdAt": "2026-06-22T12:00:00Z", "updatedAt": "2026-06-22T12:00:00Z", "isDraft": False, "headRefName": "top", "baseRefName": "bottom", "repository": {"nameWithOwner": "acme/a"}},
             {"number": 3, "title": "Single", "url": "https://github.com/acme/a/pull/3", "body": "Graphite PR: https://app.graphite.com/github/pr/acme/a/3", "createdAt": "2026-06-22T12:00:00Z", "updatedAt": "2026-06-22T12:00:00Z", "isDraft": False, "headRefName": "single", "baseRefName": "main", "repository": {"nameWithOwner": "acme/a"}},
         ]
         cache = sketchybar_prs.build_cache(mine, [], now=datetime(2026, 6, 23, 12, 0, tzinfo=timezone.utc))
-        by_id = {pr["id"]: pr for pr in cache["mine"]}
-        self.assertTrue(by_id["acme/a#1"]["isStack"])
-        self.assertEqual(by_id["acme/a#1"]["stackPosition"], "1/2")
-        self.assertEqual(by_id["acme/a#1"]["displayName"], "bottom")
-        self.assertTrue(by_id["acme/a#2"]["isStack"])
-        self.assertEqual(by_id["acme/a#2"]["stackPosition"], "2/2")
-        self.assertEqual(by_id["acme/a#2"]["displayName"], "top")
-        self.assertEqual(by_id["acme/a#2"]["openUrl"], "https://app.graphite.com/github/pr/acme/a/2")
-        self.assertFalse(by_id["acme/a#3"]["isStack"])
-        self.assertEqual(by_id["acme/a#3"]["stackPosition"], "")
-        self.assertEqual(by_id["acme/a#3"]["displayName"], "single")
-        self.assertEqual(by_id["acme/a#3"]["openUrl"], "https://github.com/acme/a/pull/3")
+        self.assertEqual([pr["id"] for pr in cache["mine"]], ["acme/a#1", "acme/a#3"])
+        base = cache["mine"][0]
+        single = cache["mine"][1]
+        self.assertTrue(base["isStack"])
+        self.assertEqual(base["stackPosition"], "1/2")
+        self.assertEqual(base["displayName"], "bottom")
+        self.assertEqual(base["openUrl"], "https://github.com/acme/a/pull/1")
+        self.assertEqual([child["id"] for child in base["children"]], ["acme/a#2"])
+        self.assertEqual(base["children"][0]["stackPosition"], "2/2")
+        self.assertEqual(base["children"][0]["openUrl"], "https://github.com/acme/a/pull/2")
+        self.assertFalse(single["isStack"])
+        self.assertEqual(single["children"], [])
+
+    def test_gh_stack_view_metadata_maps_pr_urls_to_stack_positions(self):
+        view = {
+            "branches": [
+                {"name": "bottom", "pr": {"number": 10, "url": "https://github.com/acme/a/pull/10", "state": "OPEN"}},
+                {"name": "top", "pr": {"number": 11, "url": "https://github.com/acme/a/pull/11", "state": "OPEN"}},
+            ]
+        }
+        meta = sketchybar_prs.gh_stack_metadata_from_view(view, {"acme/a#10", "acme/a#11"})
+        self.assertEqual(meta["acme/a#10"], {"position": "1/2", "rootId": "acme/a#10"})
+        self.assertEqual(meta["acme/a#11"], {"position": "2/2", "rootId": "acme/a#10"})
 
     def test_load_cache_reports_missing_cache_as_stale_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -106,16 +117,19 @@ class SketchybarPrsTests(unittest.TestCase):
 
     def test_render_summary_and_tsv_escape_values_for_lua_consumption(self):
         cache = {
-            "count": 1,
+            "count": 2,
             "stale": True,
             "error": None,
-            "mine": [{"repo": "acme/widgets", "age": "3d", "status": "open", "title": "Add\twidget\nnow", "openUrl": "https://github.com/acme/widgets/pull/42", "isStack": False}],
+            "mine": [{"id": "acme/widgets#42", "repo": "acme/widgets", "displayName": "base", "age": "3d", "status": "open", "title": "Add\twidget\nnow", "openUrl": "https://github.com/acme/widgets/pull/42", "isStack": True, "stackPosition": "1/2", "children": [
+                {"id": "acme/widgets#43", "displayName": "child", "age": "2d", "status": "ready", "title": "Child", "openUrl": "https://github.com/acme/widgets/pull/43", "isStack": True, "stackPosition": "2/2"}
+            ]}],
             "reviewRequests": [],
         }
-        self.assertEqual(sketchybar_prs.render_summary(cache), "1\tstale")
+        self.assertEqual(sketchybar_prs.render_summary(cache), "2\tstale")
         self.assertEqual(
             sketchybar_prs.render_tsv(cache),
-            "mine\tacme/widgets\t3d\topen\tAdd widget now\thttps://github.com/acme/widgets/pull/42\tfalse\t",
+            "mine\tbase\t3d\topen\tAdd widget now\thttps://github.com/acme/widgets/pull/42\ttrue\t1/2\tbase\tacme/widgets#42\t\n"
+            "mine\tchild\t2d\tready\tChild\thttps://github.com/acme/widgets/pull/43\ttrue\t2/2\tchild\tacme/widgets#43\tacme/widgets#42",
         )
 
 

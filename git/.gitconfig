@@ -65,6 +65,7 @@
 	# hooksPath = /Users/alecharmon/.git-templates/hooks
 	pager = delta
 	editor = vim
+	hooksPath = /Users/alec/.config/prim/git-hooks
 [interactive]
 	diffFilter = delta --color-only
 [delta]

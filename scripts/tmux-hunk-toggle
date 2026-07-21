@@ -17,4 +17,4 @@ fi
 
 new_pane_id="$(tmux split-window -h -P -F '#{pane_id}' -t "$window_target" -c "$pane_path")"
 tmux select-pane -t "$new_pane_id" -T hunk
-tmux send-keys -t "$new_pane_id" 'hunk diff --watch' C-m
+tmux send-keys -t "$new_pane_id" 'hunk diff "$(git merge-base "${HUNK_BASE_REF:-main}" HEAD)" --watch' C-m
