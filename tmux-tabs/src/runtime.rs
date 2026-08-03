@@ -28,6 +28,8 @@ use crate::app::{handle_event, Action, Event, State};
 use crate::control::move_sidebar_to_window;
 use crate::layout::LineStyle;
 use crate::model::{adjacent_sidebar_window, pr_refresh_targets, Direction, PrState};
+use crate::registry::{self, registry_path};
+use crate::sections;
 use crate::theme::{load_theme, Theme};
 use crate::tmux::{clear_ready_panes, display, pane_var, tmux_windows, Ctx, RealTmux, Tmux};
 
@@ -72,6 +74,12 @@ impl Runtime {
     fn refresh_windows(&mut self, term: &Term) {
         self.refresh_size(term);
         self.state.windows = tmux_windows(&self.t, &self.ctx);
+        let session_id = display(&self.t, "#{session_id}");
+        self.state.sections = sections::load(&self.ctx.sections_path(&session_id));
+        let path = registry_path(&self.ctx.home);
+        let mut tabs = registry::load(&path);
+        tabs.refresh_live(&session_id, &self.state.windows, &registry::now_string());
+        let _ = registry::save(&path, &tabs);
         self.state.on_data_changed();
     }
 

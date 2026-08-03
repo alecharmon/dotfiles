@@ -4,7 +4,10 @@
 //! from integration tests. The runtime layer (`tmux`, `runtime`) feeds these
 //! functions real data and renders/acts on their output.
 
+use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
+
+use crate::sections::SectionLayout;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum PrState {
@@ -60,6 +63,8 @@ pub struct PullRequestStatus {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Window {
     pub index: String,
+    pub window_id: String,
+    pub tab_id: String,
     pub name: String,
     pub bell: bool,
     pub ready: bool,
@@ -70,6 +75,7 @@ pub struct Window {
     pub group: String,
     pub pane: String,
     pub panes: Vec<String>,
+    pub command: String,
     pub description: String,
     pub pr: Option<PullRequestStatus>,
 }
@@ -141,9 +147,10 @@ pub fn project_group(path: &str, home: &str, cwd: &str) -> String {
     ];
     let abs = normalize_path(path, home, cwd);
 
-    let (rel, root_name) = match roots.iter().find_map(|(root, name)| {
-        abs.strip_prefix(root).ok().map(|rel| (rel, *name))
-    }) {
+    let (rel, root_name) = match roots
+        .iter()
+        .find_map(|(root, name)| abs.strip_prefix(root).ok().map(|rel| (rel, *name)))
+    {
         Some(found) => found,
         None => return "Other".to_string(),
     };
@@ -171,6 +178,43 @@ pub fn project_group(path: &str, home: &str, cwd: &str) -> String {
 /// Group windows by their `group`, ordering group names case-insensitively
 /// with `Other` always last (mirrors `grouped_windows`).
 pub fn grouped_windows(windows: &[Window]) -> Vec<(String, Vec<&Window>)> {
+    grouped_windows_with_sections(windows, &SectionLayout::default())
+}
+
+/// Group windows with persistent custom sections first. A window assigned to a
+/// custom section is omitted from its folder-derived group.
+pub fn grouped_windows_with_sections<'a>(
+    windows: &'a [Window],
+    layout: &SectionLayout,
+) -> Vec<(String, Vec<&'a Window>)> {
+    let mut out: Vec<(String, Vec<&Window>)> = Vec::new();
+    let mut assigned: HashSet<String> = HashSet::new();
+
+    for section in &layout.sections {
+        let mut section_windows = Vec::new();
+        for id in &section.windows {
+            if let Some(window) = windows
+                .iter()
+                .find(|w| !w.window_id.is_empty() && &w.window_id == id)
+            {
+                section_windows.push(window);
+                assigned.insert(window.window_id.clone());
+            }
+        }
+        if !section_windows.is_empty() {
+            out.push((section.name.clone(), section_windows));
+        }
+    }
+
+    let unassigned: Vec<&Window> = windows
+        .iter()
+        .filter(|w| w.window_id.is_empty() || !assigned.contains(&w.window_id))
+        .collect();
+    out.extend(group_folder_windows(unassigned));
+    out
+}
+
+fn group_folder_windows(windows: Vec<&Window>) -> Vec<(String, Vec<&Window>)> {
     let mut order: Vec<String> = Vec::new();
     let mut groups: std::collections::HashMap<String, Vec<&Window>> =
         std::collections::HashMap::new();
@@ -198,7 +242,14 @@ pub fn grouped_windows(windows: &[Window]) -> Vec<(String, Vec<&Window>)> {
 
 /// The window indexes in sidebar (grouped) order.
 pub fn sidebar_window_order(windows: &[Window]) -> Vec<String> {
-    grouped_windows(windows)
+    sidebar_window_order_with_sections(windows, &SectionLayout::default())
+}
+
+pub fn sidebar_window_order_with_sections(
+    windows: &[Window],
+    layout: &SectionLayout,
+) -> Vec<String> {
+    grouped_windows_with_sections(windows, layout)
         .into_iter()
         .flat_map(|(_, ws)| ws.into_iter().map(|w| w.index.clone()))
         .collect()
@@ -220,7 +271,16 @@ pub enum Direction {
 
 /// The window index adjacent to `current` in sidebar order, wrapping around.
 pub fn adjacent_sidebar_window(windows: &[Window], current: &str, dir: Direction) -> String {
-    let order = sidebar_window_order(windows);
+    adjacent_sidebar_window_with_sections(windows, &SectionLayout::default(), current, dir)
+}
+
+pub fn adjacent_sidebar_window_with_sections(
+    windows: &[Window],
+    layout: &SectionLayout,
+    current: &str,
+    dir: Direction,
+) -> String {
+    let order = sidebar_window_order_with_sections(windows, layout);
     if order.is_empty() {
         return String::new();
     }
@@ -322,8 +382,21 @@ pub fn window_icon(w: &Window) -> &'static str {
 /// Action menu labels for a window (mirrors `action_menu_labels`).
 pub fn action_menu_labels(has_pr_url: bool) -> Vec<&'static str> {
     if has_pr_url {
-        vec!["open PR", "refresh PR", "rename", "kill", "kill + rm worktree", "clear ready"]
+        vec![
+            "open PR",
+            "refresh PR",
+            "rename",
+            "kill",
+            "kill + rm worktree",
+            "clear ready",
+        ]
     } else {
-        vec!["refresh PR", "rename", "kill", "kill + rm worktree", "clear ready"]
+        vec![
+            "refresh PR",
+            "rename",
+            "kill",
+            "kill + rm worktree",
+            "clear ready",
+        ]
     }
 }

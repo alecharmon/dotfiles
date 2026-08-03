@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use crate::model::{project_group, window_display_name, PrState, PullRequestStatus, Window};
+use crate::registry::generated_tab_id;
 
 /// Abstraction over running tmux. Real runtime shells out; tests fake it.
 pub trait Tmux {
@@ -74,6 +75,14 @@ impl Ctx {
 
     pub fn pr_status_dir(&self) -> PathBuf {
         self.cache_home.join("dotfiles").join("pr-status")
+    }
+
+    pub fn sections_path(&self, session_id: &str) -> PathBuf {
+        self.cache_home
+            .join("dotfiles")
+            .join("tmux-tabs")
+            .join("sections")
+            .join(format!("{}.json", session_id.trim_start_matches('$')))
     }
 }
 
@@ -289,17 +298,18 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
     let ready_windows = ready_window_indexes(&window_panes, &ready);
 
     let session_id = display(t, "#{session_id}");
-    let fmt = "#{window_index}|#{window_name}|#{window_bell_flag}|#{window_flags}|#{pane_title}|#{pane_current_path}";
+    let fmt = "#{window_index}|#{window_id}|#{@tmux-tabs-tab-id}|#{window_name}|#{window_bell_flag}|#{window_flags}|#{pane_title}|#{pane_current_path}";
     let out = t.run(&["list-windows", "-F", fmt]).unwrap_or_default();
 
     let mut windows = Vec::new();
     for line in out.lines() {
-        let parts: Vec<&str> = line.splitn(6, '|').collect();
-        if parts.len() < 6 {
+        let parts: Vec<&str> = line.splitn(8, '|').collect();
+        if parts.len() < 8 {
             continue;
         }
-        let (idx, name, bell, flags, title, path) =
-            (parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]);
+        let (idx, window_id, raw_tab_id, name, bell, flags, title, path) = (
+            parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7],
+        );
 
         let panes = pane_records(t, idx);
         let rep = representative_pane(&panes, &ctx.home);
@@ -314,8 +324,25 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
         let command = rep.map(|p| p.command.clone()).unwrap_or_default();
         let bell_flag = bell == "1";
 
+        let tab_id = if raw_tab_id.trim().is_empty() {
+            let generated = generated_tab_id(window_id);
+            let _ = t.run(&[
+                "set-option",
+                "-w",
+                "-t",
+                window_id,
+                "@tmux-tabs-tab-id",
+                &generated,
+            ]);
+            generated
+        } else {
+            raw_tab_id.to_string()
+        };
+
         windows.push(Window {
             index: idx.to_string(),
+            window_id: window_id.to_string(),
+            tab_id,
             name: window_display_name(name, &command, &display_path),
             bell: bell_flag,
             ready: bell_flag || ready_windows.contains(idx),
@@ -326,6 +353,7 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
             group: project_group(&display_path, &ctx.home, &ctx.cwd),
             pane: rep.map(|p| p.id.clone()).unwrap_or_default(),
             panes: window_panes.get(idx).cloned().unwrap_or_default(),
+            command,
             description: description_for_window(ctx, &session_id, idx),
             pr: rep.and_then(|p| pr_for_pane(ctx, &p.id)),
         });

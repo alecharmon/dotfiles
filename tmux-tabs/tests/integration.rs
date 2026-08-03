@@ -4,10 +4,12 @@
 use tmux_tabs::app::{handle_event, Action, Event, State};
 use tmux_tabs::layout::{build_lines, LineStyle, Target};
 use tmux_tabs::model::{
-    adjacent_sidebar_window, clipped_text, grouped_windows, project_group, sidebar_width,
-    pr_refresh_targets, sidebar_width_with_config, sidebar_window_order, window_display_name,
-    Direction, PrState, PullRequestStatus, SidebarWidthConfig, Window,
+    adjacent_sidebar_window, clipped_text, grouped_windows, grouped_windows_with_sections,
+    pr_refresh_targets, project_group, sidebar_width, sidebar_width_with_config,
+    sidebar_window_order, window_display_name, Direction, PrState, PullRequestStatus,
+    SidebarWidthConfig, Window,
 };
+use tmux_tabs::sections::SectionLayout;
 
 const HOME: &str = "/home/alec";
 const CWD: &str = "/home/alec";
@@ -39,7 +41,10 @@ fn project_group_classifies_paths() {
         "api"
     );
     assert_eq!(project_group("/home/alec/dev/flora", HOME, CWD), "flora");
-    assert_eq!(project_group("/home/alec/worktrees/myrepo", HOME, CWD), "myrepo");
+    assert_eq!(
+        project_group("/home/alec/worktrees/myrepo", HOME, CWD),
+        "myrepo"
+    );
     assert_eq!(
         project_group("/home/alec/worktrees/myrepo/sub", HOME, CWD),
         "myrepo"
@@ -62,6 +67,79 @@ fn groups_order_alphabetically_with_other_last() {
         .map(|(n, _)| n)
         .collect();
     assert_eq!(names, vec!["Apple", "zebra", "Other"]);
+}
+
+#[test]
+fn custom_sections_appear_first_in_explicit_order() {
+    let mut windows = vec![
+        win("1", "zebra", "a"),
+        win("2", "Apple", "b"),
+        win("3", "Other", "c"),
+        win("4", "Apple", "d"),
+    ];
+    windows[0].window_id = "@1".into();
+    windows[1].window_id = "@2".into();
+    windows[2].window_id = "@3".into();
+    windows[3].window_id = "@4".into();
+    let mut layout = SectionLayout::default();
+    layout.add_window("Review", "@3");
+    layout.add_window("Build", "@1");
+
+    let groups: Vec<(String, Vec<String>)> = grouped_windows_with_sections(&windows, &layout)
+        .into_iter()
+        .map(|(name, ws)| (name, ws.into_iter().map(|w| w.index.clone()).collect()))
+        .collect();
+
+    assert_eq!(
+        groups,
+        vec![
+            ("Review".to_string(), vec!["3".to_string()]),
+            ("Build".to_string(), vec!["1".to_string()]),
+            ("Apple".to_string(), vec!["2".to_string(), "4".to_string()]),
+        ]
+    );
+}
+
+#[test]
+fn unassigned_windows_keep_folder_grouping() {
+    let mut windows = vec![win("1", "zebra", "a"), win("2", "Apple", "b")];
+    windows[0].window_id = "@1".into();
+    windows[1].window_id = "@2".into();
+    let mut layout = SectionLayout::default();
+    layout.add_window("Review", "@1");
+
+    let groups: Vec<(String, Vec<String>)> = grouped_windows_with_sections(&windows, &layout)
+        .into_iter()
+        .map(|(name, ws)| (name, ws.into_iter().map(|w| w.index.clone()).collect()))
+        .collect();
+
+    assert_eq!(
+        groups,
+        vec![
+            ("Review".to_string(), vec!["1".to_string()]),
+            ("Apple".to_string(), vec!["2".to_string()]),
+        ]
+    );
+}
+
+#[test]
+fn folder_groups_render_with_folder_icon_but_custom_sections_do_not() {
+    let mut windows = vec![win("1", "zebra", "a"), win("2", "Apple", "b")];
+    windows[0].window_id = "@1".into();
+    windows[1].window_id = "@2".into();
+    let mut layout = SectionLayout::default();
+    layout.add_window("🔎 Review", "@1");
+
+    let group_text: Vec<String> =
+        tmux_tabs::layout::build_lines_with_sections(&windows, &layout, "", 30)
+            .into_iter()
+            .filter_map(|line| match line.style {
+                LineStyle::Group => Some(line.text),
+                _ => None,
+            })
+            .collect();
+
+    assert_eq!(group_text, vec!["🔎 Review", "📁 Apple"]);
 }
 
 #[test]
@@ -329,7 +407,13 @@ fn layout_shows_open_pr_detail_line() {
     });
 
     assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 ready"));
-    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::Ready, .. })));
+    assert!(s.lines().iter().any(|l| matches!(
+        l.style,
+        LineStyle::Pr {
+            state: PrState::Ready,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -344,7 +428,13 @@ fn layout_marks_ci_running_pr_detail_line() {
     });
 
     assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 CI…"));
-    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::CiRunning, .. })));
+    assert!(s.lines().iter().any(|l| matches!(
+        l.style,
+        LineStyle::Pr {
+            state: PrState::CiRunning,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -359,7 +449,13 @@ fn layout_marks_failed_pr_detail_line() {
     });
 
     assert!(s.lines().iter().any(|l| l.text == "   ● PR #42 failed"));
-    assert!(s.lines().iter().any(|l| matches!(l.style, LineStyle::Pr { state: PrState::CiFailed, .. })));
+    assert!(s.lines().iter().any(|l| matches!(
+        l.style,
+        LineStyle::Pr {
+            state: PrState::CiFailed,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -393,7 +489,10 @@ fn single_click_on_pr_detail_line_switches_window() {
         .position(|l| l.text == "   ● PR #42 ready")
         .unwrap() as u16;
 
-    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::SwitchTo("1".into())]);
+    assert_eq!(
+        handle_event(&mut s, Event::Click { row }),
+        vec![Action::SwitchTo("1".into())]
+    );
 }
 
 #[test]
@@ -438,7 +537,10 @@ fn clicking_pr_detail_without_url_switches_window() {
         .position(|l| l.text == "   ● PR #42 open")
         .unwrap() as u16;
 
-    assert_eq!(handle_event(&mut s, Event::Click { row }), vec![Action::SwitchTo("1".into())]);
+    assert_eq!(
+        handle_event(&mut s, Event::Click { row }),
+        vec![Action::SwitchTo("1".into())]
+    );
 }
 
 #[test]

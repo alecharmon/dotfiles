@@ -14,6 +14,30 @@ tmux-tabs                 toggle the sidebar (kill if open, else spawn)
 tmux-tabs --sidebar       run the sidebar TUI (invoked internally by the split)
 tmux-tabs --select prev   move the sidebar to the previous grouped window
 tmux-tabs --select next   move the sidebar to the next grouped window
+tmux-tabs --list-json     print agent-readable window metadata
+tmux-tabs --find <ref>    resolve a tab reference to matching metadata
+tmux-tabs --capture <ref> capture the referenced tab's active pane
+tmux-tabs --send <ref> <text>
+                        paste text into the referenced tab and press Enter
+tmux-tabs --paste <ref> <text>
+                        paste text into the referenced tab without Enter
+tmux-tabs --section create <name>
+                        create a persistent custom sidebar section
+tmux-tabs --section add <name> <ref>
+                        add the referenced tab to a section
+tmux-tabs --section remove <name> <ref>
+                        remove the referenced tab from a section
+tmux-tabs --section delete <name>
+                        delete a custom section
+tmux-tabs --section list-json
+                        print the persistent section layout
+tmux-tabs --tab set-status <ref> <status>
+                        set durable status for a tab
+tmux-tabs --tab set-resume <ref> <command>
+                        set the command needed to resume work in a tab
+tmux-tabs --tab status-json <ref>
+                        print durable status/resume metadata for a tab
+tmux-tabs --tabs-json     print the global durable tab registry
 ```
 
 Inside the sidebar:
@@ -51,6 +75,62 @@ The launcher builds this automatically on first use. `setup.sh` /
 
 Optional descriptions require `llm-redactor-exec` and `pi` on `PATH`; without
 them the sidebar simply omits descriptions.
+
+## Custom sections
+
+Agents can create persistent sidebar sections that override folder-derived
+project groups. Section assignments are saved per tmux session under the
+existing tmux-tabs cache directory. Commands accept the same friendly tab
+references as capture/send, then store stable tmux window ids internally.
+
+```bash
+tmux-tabs --section create "Review"
+tmux-tabs --section add "Review" '@tab:sidebar'
+tmux-tabs --section remove "Review" '@tab:tests'
+tmux-tabs --section delete "Review"
+tmux-tabs --section list-json
+```
+
+A tab can belong to one custom section at a time; adding it to a new section
+removes it from any previous custom section. Tabs not assigned to a custom
+section keep the existing folder-based grouping.
+
+## Durable tab status and resume metadata
+
+`tmux-tabs` maintains a global durable registry at `~/.tmux-tabs.yml`. Each live
+window gets a generated persistent tab id stored in the tmux window option
+`@tmux-tabs-tab-id`; the registry records the current tmux ids, name, path,
+command, status, resume command, and last-seen timestamp. The sidebar refreshes
+live metadata periodically, and CLI reads also refresh it.
+
+Agents can explicitly set status and resume commands:
+
+```bash
+tmux-tabs --tab set-status '@tab:agent' waiting_for_input
+tmux-tabs --tab set-resume '@tab:agent' 'pi resume abc123'
+tmux-tabs --tab status-json '@tab:agent'
+tmux-tabs --tabs-json
+```
+
+Supported statuses are `unknown`, `running`, `waiting_for_input`, `blocked`,
+`done`, and `dead`.
+
+## Agent tab references
+
+Agents and scripts can reference other tabs through the CLI. A reference can be a
+window index, generated tab name, description, title, path, or `@tab:<query>`.
+Matching prefers exact index/name/description/title/path matches, then partial
+matches.
+
+Examples:
+
+```bash
+tmux-tabs --list-json
+tmux-tabs --find '@tab:sidebar'
+tmux-tabs --capture '@tab:sidebar'
+tmux-tabs --send '@tab:tests' 'cargo test --manifest-path tmux-tabs/Cargo.toml'
+tmux-tabs --paste '@tab:notes' 'remember to check release build'
+```
 
 Optional PR status uses `../scripts/pr-status refresh --pane <pane> --path <repo>`,
 which shells out to `gh pr view` and caches results in

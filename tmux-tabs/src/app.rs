@@ -5,7 +5,8 @@
 //! plain data, so integration tests can drive it directly — no terminal, no
 //! tmux — and assert on the resulting actions and scroll/menu state.
 
-use crate::layout::{build_lines, Target, VisualLine};
+use crate::layout::{build_lines_with_sections, Target, VisualLine};
+use crate::sections::SectionLayout;
 
 /// An abstract input event, decoupled from crossterm so tests can synthesise it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,11 +50,12 @@ pub struct State {
     pub height: usize,
     pub scroll: usize,
     pub current_window: String,
+    pub sections: SectionLayout,
 }
 
 impl State {
     pub fn lines(&self) -> Vec<VisualLine> {
-        build_lines(&self.windows, &self.menu_window, self.width)
+        build_lines_with_sections(&self.windows, &self.sections, &self.menu_window, self.width)
     }
 
     /// Largest valid scroll offset given current content and viewport height.
@@ -145,7 +147,8 @@ pub fn handle_event(state: &mut State, event: Event) -> Vec<Action> {
         }
         Event::DoubleClick { row } => {
             let idx = state.scroll + row as usize;
-            if let Some(Target::OpenPr(index)) = state.lines().get(idx).and_then(|l| l.target.clone())
+            if let Some(Target::OpenPr(index)) =
+                state.lines().get(idx).and_then(|l| l.target.clone())
             {
                 out.push(Action::OpenPr(index));
             }

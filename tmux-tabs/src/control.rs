@@ -3,17 +3,22 @@
 //! the runtime uses to follow focus.
 
 use crate::model::{
-    adjacent_sidebar_window, sidebar_width_with_config, Direction, SidebarWidthConfig, Window,
+    adjacent_sidebar_window_with_sections, sidebar_width_with_config, Direction,
+    SidebarWidthConfig, Window,
 };
-use crate::tmux::{
-    active_pane, display, leftmost_active_pane, pane_var, tmux_windows, Ctx, Tmux,
-};
+use crate::sections;
+use crate::tmux::{active_pane, display, leftmost_active_pane, pane_var, tmux_windows, Ctx, Tmux};
 
 /// Find the sidebar pane in the current session, if present.
 pub fn sidebar_pane_id<T: Tmux>(t: &T) -> String {
     let current_session = display(t, "#{session_id}");
     let out = t
-        .run(&["list-panes", "-a", "-F", "#{session_id}|#{pane_id}|#{pane_title}"])
+        .run(&[
+            "list-panes",
+            "-a",
+            "-F",
+            "#{session_id}|#{pane_id}|#{pane_title}",
+        ])
         .unwrap_or_default();
     for line in out.lines() {
         let parts: Vec<&str> = line.splitn(3, '|').collect();
@@ -37,14 +42,25 @@ pub fn move_sidebar_to_window<T: Tmux>(
     }
     let target_pane = leftmost_active_pane(t, win_index, &ctx.home);
     let focus_pane = active_pane(t, win_index, &ctx.home);
-    let target_width: usize = pane_var(t, &target_pane, "#{window_width}").parse().unwrap_or(0);
+    let target_width: usize = pane_var(t, &target_pane, "#{window_width}")
+        .parse()
+        .unwrap_or(0);
     let width_config = sidebar_width_config(t);
     let width = current_sidebar_width(t, sidebar_pane)
         .map(|w| clamp_sidebar_width(w, target_width, width_config))
         .unwrap_or_else(|| sidebar_width_with_config(windows, target_width, width_config));
     let width_s = width.to_string();
     let _ = t.run(&[
-        "move-pane", "-h", "-l", &width_s, "-s", sidebar_pane, "-t", &target_pane, "-d", "-b",
+        "move-pane",
+        "-h",
+        "-l",
+        &width_s,
+        "-s",
+        sidebar_pane,
+        "-t",
+        &target_pane,
+        "-d",
+        "-b",
     ]);
     let _ = t.run(&["select-window", "-t", win_index]);
     if !focus_pane.is_empty() {
@@ -62,7 +78,10 @@ fn current_sidebar_width<T: Tmux>(t: &T, sidebar_pane: &str) -> Option<usize> {
 
 fn clamp_sidebar_width(width: usize, target_window_width: usize, cfg: SidebarWidthConfig) -> usize {
     let min_width = cfg.min.max(1);
-    let max_width = cfg.max.max(min_width).min((target_window_width / 4).max(min_width));
+    let max_width = cfg
+        .max
+        .max(min_width)
+        .min((target_window_width / 4).max(min_width));
     width.max(min_width).min(max_width)
 }
 
@@ -70,7 +89,9 @@ fn clamp_sidebar_width(width: usize, target_window_width: usize, cfg: SidebarWid
 pub fn select_adjacent_sidebar_window<T: Tmux>(t: &T, ctx: &Ctx, dir: Direction) {
     let windows = tmux_windows(t, ctx);
     let current = display(t, "#{window_index}");
-    let target = adjacent_sidebar_window(&windows, &current, dir);
+    let session_id = display(t, "#{session_id}");
+    let layout = sections::load(&ctx.sections_path(&session_id));
+    let target = adjacent_sidebar_window_with_sections(&windows, &layout, &current, dir);
     if !target.is_empty() && target != current {
         let sidebar = sidebar_pane_id(t);
         if !sidebar.is_empty() {
@@ -101,7 +122,12 @@ pub fn sidebar_width_config<T: Tmux>(t: &T) -> SidebarWidthConfig {
 pub fn toggle_sidebar<T: Tmux>(t: &T, ctx: &Ctx, self_exe: &str) {
     let current_session = display(t, "#{session_id}");
     let panes = t
-        .run(&["list-panes", "-a", "-F", "#{session_id}|#{pane_id}|#{pane_title}"])
+        .run(&[
+            "list-panes",
+            "-a",
+            "-F",
+            "#{session_id}|#{pane_id}|#{pane_title}",
+        ])
         .unwrap_or_default();
     for line in panes.lines() {
         let parts: Vec<&str> = line.splitn(3, '|').collect();
@@ -118,7 +144,16 @@ pub fn toggle_sidebar<T: Tmux>(t: &T, ctx: &Ctx, self_exe: &str) {
     let current_window = display(t, "#{window_index}");
     let target_pane = leftmost_active_pane(t, &current_window, &ctx.home);
     let cmd = format!("{self_exe} --sidebar");
-    let _ = t.run(&["split-window", "-h", "-l", &width_s, "-t", &target_pane, "-b", &cmd]);
+    let _ = t.run(&[
+        "split-window",
+        "-h",
+        "-l",
+        &width_s,
+        "-t",
+        &target_pane,
+        "-b",
+        &cmd,
+    ]);
 }
 
 #[cfg(test)]

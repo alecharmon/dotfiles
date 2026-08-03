@@ -14,14 +14,29 @@ const BIN: &str = env!("CARGO_BIN_EXE_tmux-tabs");
 
 struct Server {
     sock: String,
+    home: std::path::PathBuf,
 }
 
 impl Server {
     fn new(tag: &str) -> Self {
         let sock = format!("tmux-tabs-e2e-{}-{}", std::process::id(), tag);
-        let s = Server { sock };
+        let home =
+            std::env::temp_dir().join(format!("tmux-tabs-e2e-home-{}-{}", std::process::id(), tag));
+        let _ = std::fs::create_dir_all(&home);
+        let s = Server { sock, home };
         // Fresh server, predictable size, instant repaints.
-        s.tmux(&["new-session", "-d", "-s", "main", "-n", "alpha", "-x", "120", "-y", "40"]);
+        s.tmux(&[
+            "new-session",
+            "-d",
+            "-s",
+            "main",
+            "-n",
+            "alpha",
+            "-x",
+            "120",
+            "-y",
+            "40",
+        ]);
         s.tmux(&["set-option", "-g", "status", "off"]);
         s.tmux(&["set-option", "-g", "escape-time", "0"]);
         s
@@ -41,7 +56,9 @@ impl Server {
             args,
             String::from_utf8_lossy(&out.stderr)
         );
-        String::from_utf8_lossy(&out.stdout).trim_end_matches('\n').to_string()
+        String::from_utf8_lossy(&out.stdout)
+            .trim_end_matches('\n')
+            .to_string()
     }
 
     fn new_window(&self, name: &str) {
@@ -53,7 +70,8 @@ impl Server {
     }
 
     fn launch_sidebar(&self) {
-        let cmd = format!("{BIN} --sidebar");
+        let home = self.home.to_string_lossy();
+        let cmd = format!("HOME='{home}' XDG_CACHE_HOME='{home}/.cache' {BIN} --sidebar");
         // Spawn the sidebar to the left of the current (active) window.
         self.tmux(&["split-window", "-h", "-b", "-l", "26", cmd.as_str()]);
     }
@@ -109,8 +127,7 @@ impl Server {
 
     /// Send raw bytes to the pane's input as hex (tmux send-keys -H).
     fn send_bytes(&self, pane: &str, bytes: &[u8]) {
-        let mut args: Vec<String> =
-            vec!["send-keys".into(), "-t".into(), pane.into(), "-H".into()];
+        let mut args: Vec<String> = vec!["send-keys".into(), "-t".into(), pane.into(), "-H".into()];
         for b in bytes {
             args.push(format!("{:02x}", b));
         }
@@ -147,6 +164,7 @@ impl Server {
 impl Drop for Server {
     fn drop(&mut self) {
         let _ = self.raw(&["kill-server"]);
+        let _ = std::fs::remove_dir_all(&self.home);
     }
 }
 
@@ -236,5 +254,8 @@ fn right_click_opens_action_menu() {
     let body = s.capture(&pane).join("\n");
     assert!(body.contains("rename"), "menu missing 'rename':\n{body}");
     assert!(body.contains("kill"), "menu missing 'kill':\n{body}");
-    assert!(body.contains("clear ready"), "menu missing 'clear ready':\n{body}");
+    assert!(
+        body.contains("clear ready"),
+        "menu missing 'clear ready':\n{body}"
+    );
 }

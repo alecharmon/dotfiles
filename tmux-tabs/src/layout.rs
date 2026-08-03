@@ -5,8 +5,10 @@
 //! pure makes scroll/click behaviour directly testable without a terminal.
 
 use crate::model::{
-    action_menu_labels, clipped_text, grouped_windows, window_icon, PrState, Window, DETAIL_INDENT,
+    action_menu_labels, clipped_text, grouped_windows_with_sections, window_icon, PrState, Window,
+    DETAIL_INDENT,
 };
+use crate::sections::SectionLayout;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
@@ -19,9 +21,19 @@ pub enum Target {
 pub enum LineStyle {
     Blank,
     Group,
-    WindowName { active: bool, bell: bool },
-    Detail { active: bool, bell: bool },
-    Pr { active: bool, bell: bool, state: PrState },
+    WindowName {
+        active: bool,
+        bell: bool,
+    },
+    Detail {
+        active: bool,
+        bell: bool,
+    },
+    Pr {
+        active: bool,
+        bell: bool,
+        state: PrState,
+    },
     Action,
 }
 
@@ -44,16 +56,44 @@ impl VisualLine {
 
 /// Build the full visual-line layout for the sidebar.
 pub fn build_lines(windows: &[Window], menu_window: &str, width: usize) -> Vec<VisualLine> {
+    build_lines_with_sections(windows, &SectionLayout::default(), menu_window, width)
+}
+
+/// Build the full visual-line layout, applying persistent custom sections.
+pub fn build_lines_with_sections(
+    windows: &[Window],
+    sections: &SectionLayout,
+    menu_window: &str,
+    width: usize,
+) -> Vec<VisualLine> {
     let w = Some(width);
     let mut lines: Vec<VisualLine> = Vec::new();
     lines.push(VisualLine::blank()); // top padding
 
-    for (gi, (group, group_windows)) in grouped_windows(windows).into_iter().enumerate() {
+    let grouped = grouped_windows_with_sections(windows, sections);
+    let custom_group_count = sections
+        .sections
+        .iter()
+        .filter(|section| {
+            section.windows.iter().any(|id| {
+                windows
+                    .iter()
+                    .any(|w| !w.window_id.is_empty() && &w.window_id == id)
+            })
+        })
+        .count();
+
+    for (gi, (group, group_windows)) in grouped.into_iter().enumerate() {
         if gi > 0 {
             lines.push(VisualLine::blank());
         }
+        let group_text = if gi < custom_group_count {
+            group.clone()
+        } else {
+            format!("📁 {group}")
+        };
         lines.push(VisualLine {
-            text: group.clone(),
+            text: group_text,
             style: LineStyle::Group,
             target: None,
         });
@@ -94,7 +134,11 @@ pub fn build_lines(windows: &[Window], menu_window: &str, width: usize) -> Vec<V
                 };
                 lines.push(VisualLine {
                     text: format!("{DETAIL_INDENT}● PR #{} {}", pr.number, pr.state.label()),
-                    style: LineStyle::Pr { active, bell, state: pr.state },
+                    style: LineStyle::Pr {
+                        active,
+                        bell,
+                        state: pr.state,
+                    },
                     target: Some(pr_target),
                 });
             }
