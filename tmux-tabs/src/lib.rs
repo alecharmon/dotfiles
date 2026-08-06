@@ -4,7 +4,6 @@
 pub mod agent;
 pub mod app;
 pub mod control;
-pub mod descriptions;
 pub mod layout;
 pub mod model;
 pub mod registry;

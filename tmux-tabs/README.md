@@ -2,7 +2,7 @@
 
 A vertical window sidebar for tmux, written in Rust. Shows all tmux windows in
 a narrow left pane grouped by project, with bell/agent-ready highlights, live
-terminal titles, and optional AI-generated descriptions. This is a port of the
+terminal titles. This is a port of the
 original Python/Textual implementation.
 
 ## Usage
@@ -54,15 +54,15 @@ when you switch or open windows.
 
 ## Width
 
-The sidebar grows to fit content, then clamps to a min/max width. Defaults are
-18 and 48 cells. Override them in tmux config:
+The sidebar is a fixed width — it never grows with content or the host window
+size, so switching tabs never resizes it. The default is 32 cells; override it
+in tmux config:
 
 ```tmux
-set -g @tmux-tabs-min-width 24
-set -g @tmux-tabs-max-width 60
+set -g @tmux-tabs-width 40
 ```
 
-Missing or invalid values fall back to defaults. If max is below min, min wins.
+Missing or invalid values fall back to the default.
 
 ## Build
 
@@ -73,8 +73,17 @@ cargo build --release
 The launcher builds this automatically on first use. `setup.sh` /
 `setup-linux.sh` also build it during dotfiles setup.
 
-Optional descriptions require `llm-redactor-exec` and `pi` on `PATH`; without
-them the sidebar simply omits descriptions.
+## herdr instances
+
+Windows whose foreground command is `herdr` are grouped into a `herdr` section
+pinned to the top of the sidebar, above custom sections and folder groups.
+
+## ssh sessions
+
+Windows whose foreground command is `ssh`/`mosh`/`autossh` are grouped into a
+single `ssh` section instead of a folder group (the local cwd of a remote shell
+is meaningless), and the tab is labelled with the destination host, read from
+the ssh process arguments on the pane's tty.
 
 ## Custom sections
 
@@ -118,8 +127,8 @@ Supported statuses are `unknown`, `running`, `waiting_for_input`, `blocked`,
 ## Agent tab references
 
 Agents and scripts can reference other tabs through the CLI. A reference can be a
-window index, generated tab name, description, title, path, or `@tab:<query>`.
-Matching prefers exact index/name/description/title/path matches, then partial
+window index, tab name, title, path, or `@tab:<query>`.
+Matching prefers exact index/name/title/path matches, then partial
 matches.
 
 Examples:
@@ -154,7 +163,6 @@ The code is split so the interesting behaviour is testable without a terminal:
 - `tmux.rs` — a `Tmux` trait (real impl + fakeable) and window/pane gathering.
 - `theme.rs` — parses tmux styles into colours.
 - `control.rs` — toggle / `--select` / move-sidebar commands.
-- `descriptions.rs` — background description generation + cache.
 - `runtime.rs` — the [ratatui](https://ratatui.rs) render loop (over a crossterm
   backend): mouse capture, event translation, double-buffered drawing.
 

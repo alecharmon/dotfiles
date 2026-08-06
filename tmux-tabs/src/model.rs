@@ -76,32 +76,16 @@ pub struct Window {
     pub pane: String,
     pub panes: Vec<String>,
     pub command: String,
-    pub description: String,
     pub pr: Option<PullRequestStatus>,
 }
 
 pub const ICON_READY: &str = "🔔 ";
 pub const ICON_EMPTY: &str = "   ";
 pub const DETAIL_INDENT: &str = "   ";
-pub const DESCRIPTION_CACHE_MAX: usize = 200;
-pub const DESCRIPTION_MIN: usize = 8;
-pub const MIN_WIDTH: usize = 18;
-pub const MAX_WIDTH: usize = 48;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SidebarWidthConfig {
-    pub min: usize,
-    pub max: usize,
-}
-
-impl Default for SidebarWidthConfig {
-    fn default() -> Self {
-        Self {
-            min: MIN_WIDTH,
-            max: MAX_WIDTH,
-        }
-    }
-}
+pub const DETAIL_MIN: usize = 8;
+/// Sidebar width when `@tmux-tabs-width` is unset. The sidebar is a fixed
+/// width; it never grows or shrinks with content or host window size.
+pub const DEFAULT_WIDTH: usize = 32;
 
 /// Lexically normalise a path: expand a leading `~`, make it absolute relative
 /// to `cwd`, and collapse `.`/`..` components without touching the filesystem
@@ -211,6 +195,11 @@ pub fn grouped_windows_with_sections<'a>(
         .filter(|w| w.window_id.is_empty() || !assigned.contains(&w.window_id))
         .collect();
     out.extend(group_folder_windows(unassigned));
+    // herdr instances always ride at the top of the sidebar.
+    if let Some(pos) = out.iter().position(|(name, _)| name == HERDR_GROUP) {
+        let herdr = out.remove(pos);
+        out.insert(0, herdr);
+    }
     out
 }
 
@@ -300,37 +289,59 @@ fn char_len(s: &str) -> usize {
     s.chars().count()
 }
 
-fn strip_star(title: &str) -> String {
-    title.trim_start_matches('✳').trim().to_string()
+/// Group name for windows running a remote shell. A remote session's local cwd
+/// says nothing useful, so these never join a folder group.
+pub const SSH_GROUP: &str = "ssh";
+
+/// Group name for windows running a herdr workspace. herdr manages its own
+/// tabs, so its windows get one pinned section instead of a folder group.
+pub const HERDR_GROUP: &str = "herdr";
+
+pub fn is_herdr_command(command: &str) -> bool {
+    command.trim().trim_start_matches('-') == "herdr"
 }
 
-/// Compute the desired sidebar width in cells for the given windows and host
-/// window width (mirrors `sidebar_width`).
-pub fn sidebar_width(windows: &[Window], window_width: usize) -> usize {
-    sidebar_width_with_config(windows, window_width, SidebarWidthConfig::default())
+pub fn is_ssh_command(command: &str) -> bool {
+    matches!(
+        command.trim().trim_start_matches('-'),
+        "ssh" | "mosh" | "mosh-client" | "autossh"
+    )
 }
 
-pub fn sidebar_width_with_config(
-    windows: &[Window],
-    window_width: usize,
-    config: SidebarWidthConfig,
-) -> usize {
-    let min_width = config.min.max(1);
-    let configured_max = config.max.max(min_width);
+/// ssh flags that consume the following argument, so the destination isn't
+/// mistaken for an option's value.
+const SSH_FLAGS_WITH_VALUE: &str = "BbcDEeFIiJLlmOopQRSWw";
 
-    let mut content_width = min_width;
-    for (group, group_windows) in grouped_windows(windows) {
-        content_width = content_width.max(char_len(&group) + 2);
-        for w in group_windows {
-            content_width = content_width.max(char_len(&w.name) + 4);
-            let title = strip_star(&w.title);
-            if !title.is_empty() {
-                content_width = content_width.max(char_len(&title) + 6);
+/// Pull the destination host out of an `ssh` command line, e.g.
+/// `ssh -p 2222 deploy@box.example.com uptime` -> `box.example.com`.
+pub fn ssh_host_from_command_line(line: &str) -> Option<String> {
+    let mut tokens = line.split_whitespace();
+    let argv0 = tokens.next()?;
+    if !is_ssh_command(Path::new(argv0).file_name()?.to_str()?) {
+        return None;
+    }
+    while let Some(token) = tokens.next() {
+        if let Some(flag) = token.strip_prefix('-') {
+            let mut chars = flag.chars();
+            // `-p 2222` skips the value; `-p2222` and `-v` do not.
+            if let (Some(c), None) = (chars.next(), chars.next()) {
+                if SSH_FLAGS_WITH_VALUE.contains(c) {
+                    tokens.next();
+                }
             }
+            continue;
+        }
+        let dest = token
+            .trim_start_matches("ssh://")
+            .rsplit('@')
+            .next()
+            .unwrap_or(token);
+        let host = dest.split(['/', ':']).next().unwrap_or(dest);
+        if !host.is_empty() {
+            return Some(host.to_string());
         }
     }
-    let max_width = configured_max.min((window_width / 4).max(min_width));
-    min_width.max(content_width.min(max_width))
+    None
 }
 
 /// Derive the display name for a window, expanding bare `Python` panes to a
@@ -349,18 +360,10 @@ pub fn window_display_name(tmux_name: &str, command: &str, path: &str) -> String
     tmux_name.to_string()
 }
 
-fn description_max_for_width(width: usize) -> usize {
-    DESCRIPTION_MIN.max(width.saturating_sub(char_len(DETAIL_INDENT) + 2))
-}
-
-/// Clip text to fit either the description cache cap (`width == None`) or the
-/// sidebar width, appending an ellipsis when truncated.
-pub fn clipped_text(text: &str, width: Option<usize>) -> String {
+/// Clip text to the sidebar width, appending an ellipsis when truncated.
+pub fn clipped_text(text: &str, width: usize) -> String {
     let text = text.trim();
-    let max_len = match width {
-        None => DESCRIPTION_CACHE_MAX,
-        Some(w) => description_max_for_width(w),
-    };
+    let max_len = DETAIL_MIN.max(width.saturating_sub(char_len(DETAIL_INDENT) + 2));
     if char_len(text) <= max_len {
         return text.to_string();
     }

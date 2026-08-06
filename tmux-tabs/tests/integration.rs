@@ -5,9 +5,8 @@ use tmux_tabs::app::{handle_event, Action, Event, State};
 use tmux_tabs::layout::{build_lines, LineStyle, Target};
 use tmux_tabs::model::{
     adjacent_sidebar_window, clipped_text, grouped_windows, grouped_windows_with_sections,
-    pr_refresh_targets, project_group, sidebar_width, sidebar_width_with_config,
-    sidebar_window_order, window_display_name, Direction, PrState, PullRequestStatus,
-    SidebarWidthConfig, Window,
+    pr_refresh_targets, project_group, sidebar_window_order, ssh_host_from_command_line,
+    window_display_name, Direction, PrState, PullRequestStatus, Window,
 };
 use tmux_tabs::sections::SectionLayout;
 
@@ -179,49 +178,6 @@ fn pr_refresh_targets_include_only_windows_with_pane_and_path() {
 }
 
 #[test]
-fn width_grows_with_content_and_is_capped() {
-    let narrow = vec![win("1", "g", "short")];
-    assert_eq!(sidebar_width(&narrow, 400), 18); // floor
-
-    let mut w = win("1", "g", "a-really-quite-long-window-name-here");
-    w.title = "and an even longer descriptive title goes here too".to_string();
-    let wide = sidebar_width(&[w], 400);
-    assert!(wide > 18 && wide <= 48, "got {wide}");
-
-    // host width caps the result: 40/4 = 10 -> floored to 18.
-    assert_eq!(sidebar_width(&narrow, 40), 18);
-}
-
-#[test]
-fn descriptions_do_not_expand_sidebar_width() {
-    let mut described = win("1", "g", "short");
-    described.description =
-        "this is a very long generated description that should be clipped, not widen the sidebar"
-            .to_string();
-
-    assert_eq!(sidebar_width(&[described], 400), 18);
-}
-
-#[test]
-fn sidebar_width_honors_configured_min_and_max() {
-    let narrow = vec![win("1", "g", "short")];
-    let cfg = SidebarWidthConfig { min: 24, max: 60 };
-    assert_eq!(sidebar_width_with_config(&narrow, 400, cfg), 24);
-
-    let mut wide = win("1", "g", "a-really-quite-long-window-name-here");
-    wide.title = "and an even longer descriptive title goes here too".to_string();
-    let cfg = SidebarWidthConfig { min: 24, max: 32 };
-    assert_eq!(sidebar_width_with_config(&[wide], 400, cfg), 32);
-}
-
-#[test]
-fn sidebar_width_treats_max_below_min_as_min() {
-    let narrow = vec![win("1", "g", "short")];
-    let cfg = SidebarWidthConfig { min: 30, max: 20 };
-    assert_eq!(sidebar_width_with_config(&narrow, 400, cfg), 30);
-}
-
-#[test]
 fn display_name_expands_python_panes() {
     assert_eq!(window_display_name("zsh", "zsh", "/x"), "zsh");
     assert_eq!(
@@ -232,8 +188,8 @@ fn display_name_expands_python_panes() {
 
 #[test]
 fn clipped_text_adds_ellipsis() {
-    assert_eq!(clipped_text("hello", Some(20)), "hello");
-    let clipped = clipped_text("abcdefghijklmnop", Some(10));
+    assert_eq!(clipped_text("hello", 20), "hello");
+    let clipped = clipped_text("abcdefghijklmnop", 10);
     assert!(clipped.ends_with('…'));
     assert!(clipped.chars().count() <= 10 - 3 /* indent */ + 1);
 }
@@ -673,4 +629,59 @@ fn stale_menu_clears_when_window_disappears() {
     s.windows.retain(|w| w.index != "3");
     s.on_data_changed();
     assert_eq!(s.menu_window, "");
+}
+
+#[test]
+fn ssh_host_is_parsed_from_the_command_line() {
+    assert_eq!(
+        ssh_host_from_command_line("ssh box.example.com").as_deref(),
+        Some("box.example.com")
+    );
+    assert_eq!(
+        ssh_host_from_command_line("ssh -p 2222 -i ~/.ssh/id deploy@box.example.com uptime")
+            .as_deref(),
+        Some("box.example.com")
+    );
+    assert_eq!(
+        ssh_host_from_command_line("/usr/bin/ssh -v ssh://root@10.0.0.4:22").as_deref(),
+        Some("10.0.0.4")
+    );
+    // -p with an attached value must not swallow the destination.
+    assert_eq!(
+        ssh_host_from_command_line("ssh -p2222 devbox").as_deref(),
+        Some("devbox")
+    );
+    assert_eq!(ssh_host_from_command_line("zsh -l"), None);
+}
+
+#[test]
+fn ssh_windows_group_together_regardless_of_local_path() {
+    let a = win("1", "ssh", "devbox");
+    let b = win("2", "ssh", "prodbox");
+    let local = win("3", "dotfiles", "vim");
+
+    let windows = [a, b, local];
+    let groups = grouped_windows(&windows);
+    let ssh_group = groups.iter().find(|(n, _)| n == "ssh").expect("ssh group");
+
+    assert_eq!(ssh_group.1.len(), 2);
+    assert!(groups.iter().any(|(n, _)| n == "dotfiles"));
+}
+
+#[test]
+fn herdr_group_is_pinned_to_the_top() {
+    let mut layout = SectionLayout::default();
+    layout.add_window("Review", "@7");
+
+    let mut pinned = win("3", tmux_tabs::model::HERDR_GROUP, "herdr");
+    let mut reviewed = win("1", "alpha", "a");
+    reviewed.window_id = "@7".into();
+    pinned.window_id = "@3".into();
+    let windows = vec![reviewed, win("2", "beta", "b"), pinned];
+
+    let names: Vec<String> = grouped_windows_with_sections(&windows, &layout)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
+    assert_eq!(names, vec!["herdr", "Review", "beta"]);
 }

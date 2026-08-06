@@ -6,7 +6,7 @@
 
 use crate::model::{
     action_menu_labels, clipped_text, grouped_windows_with_sections, window_icon, PrState, Window,
-    DETAIL_INDENT,
+    DETAIL_INDENT, HERDR_GROUP,
 };
 use crate::sections::SectionLayout;
 
@@ -66,28 +66,19 @@ pub fn build_lines_with_sections(
     menu_window: &str,
     width: usize,
 ) -> Vec<VisualLine> {
-    let w = Some(width);
+    let w = width;
     let mut lines: Vec<VisualLine> = Vec::new();
     lines.push(VisualLine::blank()); // top padding
 
     let grouped = grouped_windows_with_sections(windows, sections);
-    let custom_group_count = sections
-        .sections
-        .iter()
-        .filter(|section| {
-            section.windows.iter().any(|id| {
-                windows
-                    .iter()
-                    .any(|w| !w.window_id.is_empty() && &w.window_id == id)
-            })
-        })
-        .count();
 
     for (gi, (group, group_windows)) in grouped.into_iter().enumerate() {
         if gi > 0 {
             lines.push(VisualLine::blank());
         }
-        let group_text = if gi < custom_group_count {
+        let group_text = if group == HERDR_GROUP {
+            format!("🐑 {group}")
+        } else if sections.sections.iter().any(|s| s.name == group) {
             group.clone()
         } else {
             format!("📁 {group}")
@@ -114,14 +105,6 @@ pub fn build_lines_with_sections(
             if !title.is_empty() {
                 lines.push(VisualLine {
                     text: format!("{DETAIL_INDENT}{title}"),
-                    style: LineStyle::Detail { active, bell },
-                    target: Some(target.clone()),
-                });
-            }
-            let description = clipped_text(&win.description, w);
-            if !description.is_empty() {
-                lines.push(VisualLine {
-                    text: format!("{DETAIL_INDENT}{description}"),
                     style: LineStyle::Detail { active, bell },
                     target: Some(target.clone()),
                 });

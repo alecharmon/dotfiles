@@ -2,12 +2,9 @@
 //! These are the `--select` and no-arg (toggle) entry points, plus the helper
 //! the runtime uses to follow focus.
 
-use crate::model::{
-    adjacent_sidebar_window_with_sections, sidebar_width_with_config, Direction,
-    SidebarWidthConfig, Window,
-};
+use crate::model::{adjacent_sidebar_window_with_sections, Direction, DEFAULT_WIDTH};
 use crate::sections;
-use crate::tmux::{active_pane, display, leftmost_active_pane, pane_var, tmux_windows, Ctx, Tmux};
+use crate::tmux::{active_pane, display, leftmost_active_pane, tmux_windows, Ctx, Tmux};
 
 /// Find the sidebar pane in the current session, if present.
 pub fn sidebar_pane_id<T: Tmux>(t: &T) -> String {
@@ -30,26 +27,13 @@ pub fn sidebar_pane_id<T: Tmux>(t: &T) -> String {
 }
 
 /// Move the sidebar pane to the left edge of `win_index` and focus that window.
-pub fn move_sidebar_to_window<T: Tmux>(
-    t: &T,
-    ctx: &Ctx,
-    sidebar_pane: &str,
-    win_index: &str,
-    windows: &[Window],
-) {
+pub fn move_sidebar_to_window<T: Tmux>(t: &T, ctx: &Ctx, sidebar_pane: &str, win_index: &str) {
     if sidebar_pane.is_empty() {
         return;
     }
     let target_pane = leftmost_active_pane(t, win_index, &ctx.home);
     let focus_pane = active_pane(t, win_index, &ctx.home);
-    let target_width: usize = pane_var(t, &target_pane, "#{window_width}")
-        .parse()
-        .unwrap_or(0);
-    let width_config = sidebar_width_config(t);
-    let width = current_sidebar_width(t, sidebar_pane)
-        .map(|w| clamp_sidebar_width(w, target_width, width_config))
-        .unwrap_or_else(|| sidebar_width_with_config(windows, target_width, width_config));
-    let width_s = width.to_string();
+    let width_s = sidebar_width(t).to_string();
     let _ = t.run(&[
         "move-pane",
         "-h",
@@ -62,27 +46,21 @@ pub fn move_sidebar_to_window<T: Tmux>(
         "-d",
         "-b",
     ]);
+    // move-pane does not always honour -l exactly; force the width back.
+    let _ = t.run(&["resize-pane", "-t", sidebar_pane, "-x", &width_s]);
     let _ = t.run(&["select-window", "-t", win_index]);
     if !focus_pane.is_empty() {
         let _ = t.run(&["select-pane", "-t", &focus_pane]);
     }
 }
 
-fn current_sidebar_width<T: Tmux>(t: &T, sidebar_pane: &str) -> Option<usize> {
-    pane_var(t, sidebar_pane, "#{pane_width}")
-        .trim()
-        .parse::<usize>()
+/// The sidebar's fixed width: `@tmux-tabs-width`, else `DEFAULT_WIDTH`.
+pub fn sidebar_width<T: Tmux>(t: &T) -> usize {
+    t.run(&["show-option", "-gvq", "@tmux-tabs-width"])
         .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
         .filter(|w| *w > 0)
-}
-
-fn clamp_sidebar_width(width: usize, target_window_width: usize, cfg: SidebarWidthConfig) -> usize {
-    let min_width = cfg.min.max(1);
-    let max_width = cfg
-        .max
-        .max(min_width)
-        .min((target_window_width / 4).max(min_width));
-    width.max(min_width).min(max_width)
+        .unwrap_or(DEFAULT_WIDTH)
 }
 
 /// `--select prev|next`: move the sidebar to the adjacent grouped window.
@@ -95,7 +73,7 @@ pub fn select_adjacent_sidebar_window<T: Tmux>(t: &T, ctx: &Ctx, dir: Direction)
     if !target.is_empty() && target != current {
         let sidebar = sidebar_pane_id(t);
         if !sidebar.is_empty() {
-            move_sidebar_to_window(t, ctx, &sidebar, &target, &windows);
+            move_sidebar_to_window(t, ctx, &sidebar, &target);
         } else {
             let _ = t.run(&["select-window", "-t", &target]);
         }
@@ -103,22 +81,6 @@ pub fn select_adjacent_sidebar_window<T: Tmux>(t: &T, ctx: &Ctx, dir: Direction)
 }
 
 /// No-arg entry point: kill the sidebar if open, else spawn it.
-pub fn sidebar_width_config<T: Tmux>(t: &T) -> SidebarWidthConfig {
-    let default = SidebarWidthConfig::default();
-    let read = |name: &str, fallback: usize| -> usize {
-        t.run(&["show-option", "-gvq", name])
-            .ok()
-            .and_then(|v| v.trim().parse::<usize>().ok())
-            .filter(|v| *v > 0)
-            .unwrap_or(fallback)
-    };
-
-    SidebarWidthConfig {
-        min: read("@tmux-tabs-min-width", default.min),
-        max: read("@tmux-tabs-max-width", default.max),
-    }
-}
-
 pub fn toggle_sidebar<T: Tmux>(t: &T, ctx: &Ctx, self_exe: &str) {
     let current_session = display(t, "#{session_id}");
     let panes = t
@@ -137,10 +99,7 @@ pub fn toggle_sidebar<T: Tmux>(t: &T, ctx: &Ctx, self_exe: &str) {
         }
     }
 
-    let windows = tmux_windows(t, ctx);
-    let current_width: usize = display(t, "#{window_width}").parse().unwrap_or(0);
-    let width = sidebar_width_with_config(&windows, current_width, sidebar_width_config(t));
-    let width_s = width.to_string();
+    let width_s = sidebar_width(t).to_string();
     let current_window = display(t, "#{window_index}");
     let target_pane = leftmost_active_pane(t, &current_window, &ctx.home);
     let cmd = format!("{self_exe} --sidebar");
@@ -158,22 +117,21 @@ pub fn toggle_sidebar<T: Tmux>(t: &T, ctx: &Ctx, self_exe: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::io;
 
     use super::*;
 
-    use std::cell::RefCell;
-
     struct FakeTmux {
         calls: RefCell<Vec<String>>,
-        sidebar_width: usize,
+        configured_width: Option<usize>,
     }
 
     impl FakeTmux {
-        fn new(sidebar_width: usize) -> Self {
+        fn new(configured_width: Option<usize>) -> Self {
             Self {
                 calls: RefCell::new(Vec::new()),
-                sidebar_width,
+                configured_width,
             }
         }
     }
@@ -182,106 +140,50 @@ mod tests {
         fn run(&self, args: &[&str]) -> io::Result<String> {
             self.calls.borrow_mut().push(args.join(" "));
             match args {
-                ["show-option", "-gvq", "@tmux-tabs-min-width"] => Ok("24".to_string()),
-                ["show-option", "-gvq", "@tmux-tabs-max-width"] => Ok("nope".to_string()),
+                ["show-option", "-gvq", "@tmux-tabs-width"] => Ok(self
+                    .configured_width
+                    .map(|w| w.to_string())
+                    .unwrap_or_default()),
                 ["list-panes", "-t", "2", "-F", _] => {
-                    Ok("%2|0|0|1|zsh|content|/home/alec/dev/proj".to_string())
+                    Ok("%2|0|0|1|zsh|content|/home/alec/dev/proj|/dev/ttys001".to_string())
                 }
-                ["display-message", "-p", "-t", "%sidebar", "#{pane_width}"] => {
-                    Ok(self.sidebar_width.to_string())
-                }
-                ["display-message", "-p", "-t", "%2", "#{window_width}"] => Ok("120".to_string()),
                 _ => Ok(String::new()),
             }
         }
     }
 
-    #[test]
-    fn sidebar_width_config_reads_tmux_options_with_defaults() {
-        assert_eq!(
-            sidebar_width_config(&FakeTmux::new(24)),
-            SidebarWidthConfig { min: 24, max: 48 }
-        );
-    }
-
-    #[test]
-    fn moving_existing_sidebar_preserves_current_width() {
-        let t = FakeTmux::new(24);
-        let ctx = Ctx {
+    fn ctx() -> Ctx {
+        Ctx {
             home: "/home/alec".to_string(),
             cwd: "/home/alec".to_string(),
             cache_home: "/tmp".into(),
-        };
-        let windows = vec![Window {
-            index: "2".to_string(),
-            name: "a-really-quite-long-window-name-that-would-autogrow".to_string(),
-            group: "proj".to_string(),
-            ..Default::default()
-        }];
-
-        move_sidebar_to_window(&t, &ctx, "%sidebar", "2", &windows);
-
-        assert!(
-            t.calls
-                .borrow()
-                .iter()
-                .any(|c| c == "move-pane -h -l 24 -s %sidebar -t %2 -d -b"),
-            "calls: {:?}",
-            t.calls.borrow()
-        );
+        }
     }
 
     #[test]
-    fn moving_existing_sidebar_width_clamps_below_minimum() {
-        let t = FakeTmux::new(10);
-        let ctx = Ctx {
-            home: "/home/alec".to_string(),
-            cwd: "/home/alec".to_string(),
-            cache_home: "/tmp".into(),
-        };
-        let windows = vec![Window {
-            index: "2".to_string(),
-            name: "short".to_string(),
-            group: "proj".to_string(),
-            ..Default::default()
-        }];
-
-        move_sidebar_to_window(&t, &ctx, "%sidebar", "2", &windows);
-
-        assert!(
-            t.calls
-                .borrow()
-                .iter()
-                .any(|c| c == "move-pane -h -l 24 -s %sidebar -t %2 -d -b"),
-            "calls: {:?}",
-            t.calls.borrow()
-        );
+    fn width_comes_from_the_tmux_option_or_the_default() {
+        assert_eq!(sidebar_width(&FakeTmux::new(Some(40))), 40);
+        assert_eq!(sidebar_width(&FakeTmux::new(None)), DEFAULT_WIDTH);
     }
 
     #[test]
-    fn moving_existing_sidebar_width_clamps_above_max_for_target_window() {
-        let t = FakeTmux::new(200);
-        let ctx = Ctx {
-            home: "/home/alec".to_string(),
-            cwd: "/home/alec".to_string(),
-            cache_home: "/tmp".into(),
-        };
-        let windows = vec![Window {
-            index: "2".to_string(),
-            name: "a-really-quite-long-window-name-that-would-autogrow".to_string(),
-            group: "proj".to_string(),
-            ..Default::default()
-        }];
+    fn moving_the_sidebar_always_uses_the_fixed_width() {
+        let t = FakeTmux::new(Some(32));
 
-        move_sidebar_to_window(&t, &ctx, "%sidebar", "2", &windows);
+        move_sidebar_to_window(&t, &ctx(), "%sidebar", "2");
 
+        let calls = t.calls.borrow();
         assert!(
-            t.calls
-                .borrow()
+            calls
                 .iter()
-                .any(|c| c == "move-pane -h -l 30 -s %sidebar -t %2 -d -b"),
+                .any(|c| c == "move-pane -h -l 32 -s %sidebar -t %2 -d -b"),
             "calls: {:?}",
-            t.calls.borrow()
+            calls
+        );
+        assert!(
+            calls.iter().any(|c| c == "resize-pane -t %sidebar -x 32"),
+            "calls: {:?}",
+            calls
         );
     }
 }

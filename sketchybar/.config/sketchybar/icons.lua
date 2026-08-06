@@ -6,6 +6,7 @@ return {
     empire = "",
     gear = "􀍟",
     cpu = "􀫥",
+    memory = "􀫦",
     nuke = "",
     clipboard = "􀉄",
 

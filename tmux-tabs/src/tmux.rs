@@ -6,7 +6,10 @@ use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::model::{project_group, window_display_name, PrState, PullRequestStatus, Window};
+use crate::model::{
+    is_herdr_command, is_ssh_command, project_group, ssh_host_from_command_line, window_display_name, PrState,
+    PullRequestStatus, Window, HERDR_GROUP, SSH_GROUP,
+};
 use crate::registry::generated_tab_id;
 
 /// Abstraction over running tmux. Real runtime shells out; tests fake it.
@@ -65,14 +68,6 @@ impl Ctx {
         self.cache_home.join("dotfiles").join("agent-ready")
     }
 
-    pub fn descriptions_dir(&self, session_id: &str) -> PathBuf {
-        self.cache_home
-            .join("dotfiles")
-            .join("tmux-tabs")
-            .join("descriptions")
-            .join(session_id.trim_start_matches('$'))
-    }
-
     pub fn pr_status_dir(&self) -> PathBuf {
         self.cache_home.join("dotfiles").join("pr-status")
     }
@@ -104,6 +99,7 @@ pub struct PaneRecord {
     pub command: String,
     pub title: String,
     pub path: String,
+    pub tty: String,
 }
 
 fn is_sidebar_pane(command: &str, title: &str, path: &str, home: &str) -> bool {
@@ -113,14 +109,14 @@ fn is_sidebar_pane(command: &str, title: &str, path: &str, home: &str) -> bool {
 }
 
 pub fn pane_records<T: Tmux>(t: &T, win_index: &str) -> Vec<PaneRecord> {
-    let fmt = "#{pane_id}|#{pane_left}|#{pane_top}|#{pane_active}|#{pane_current_command}|#{pane_title}|#{pane_current_path}";
+    let fmt = "#{pane_id}|#{pane_left}|#{pane_top}|#{pane_active}|#{pane_current_command}|#{pane_title}|#{pane_current_path}|#{pane_tty}";
     let out = t
         .run(&["list-panes", "-t", win_index, "-F", fmt])
         .unwrap_or_default();
     let mut panes = Vec::new();
     for line in out.lines() {
-        let parts: Vec<&str> = line.splitn(7, '|').collect();
-        if parts.len() < 7 {
+        let parts: Vec<&str> = line.splitn(8, '|').collect();
+        if parts.len() < 8 {
             continue;
         }
         panes.push(PaneRecord {
@@ -131,6 +127,7 @@ pub fn pane_records<T: Tmux>(t: &T, win_index: &str) -> Vec<PaneRecord> {
             command: parts[4].to_string(),
             title: parts[5].to_string(),
             path: parts[6].to_string(),
+            tty: parts[7].to_string(),
         });
     }
     panes
@@ -297,7 +294,6 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
     let ready = ready_panes(ctx, &live);
     let ready_windows = ready_window_indexes(&window_panes, &ready);
 
-    let session_id = display(t, "#{session_id}");
     let fmt = "#{window_index}|#{window_id}|#{@tmux-tabs-tab-id}|#{window_name}|#{window_bell_flag}|#{window_flags}|#{pane_title}|#{pane_current_path}";
     let out = t.run(&["list-windows", "-F", fmt]).unwrap_or_default();
 
@@ -322,6 +318,11 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| title.to_string());
         let command = rep.map(|p| p.command.clone()).unwrap_or_default();
+        let ssh_host = if is_ssh_command(&command) {
+            rep.and_then(|p| ssh_host_for_tty(&p.tty))
+        } else {
+            None
+        };
         let bell_flag = bell == "1";
 
         let tab_id = if raw_tab_id.trim().is_empty() {
@@ -343,34 +344,45 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
             index: idx.to_string(),
             window_id: window_id.to_string(),
             tab_id,
-            name: window_display_name(name, &command, &display_path),
+            name: ssh_host
+                .clone()
+                .unwrap_or_else(|| window_display_name(name, &command, &display_path)),
             bell: bell_flag,
             ready: bell_flag || ready_windows.contains(idx),
             active: flags.contains('*'),
             last: flags.contains('-'),
             title: display_title,
             path: display_path.clone(),
-            group: project_group(&display_path, &ctx.home, &ctx.cwd),
+            group: if is_ssh_command(&command) {
+                SSH_GROUP.to_string()
+            } else if is_herdr_command(&command) {
+                HERDR_GROUP.to_string()
+            } else {
+                project_group(&display_path, &ctx.home, &ctx.cwd)
+            },
             pane: rep.map(|p| p.id.clone()).unwrap_or_default(),
             panes: window_panes.get(idx).cloned().unwrap_or_default(),
             command,
-            description: description_for_window(ctx, &session_id, idx),
             pr: rep.and_then(|p| pr_for_pane(ctx, &p.id)),
         });
     }
     windows
 }
 
-fn description_for_window(ctx: &Ctx, session_id: &str, win_index: &str) -> String {
-    let path = ctx.descriptions_dir(session_id).join(format!(
-        "{}-{}.json",
-        session_id.trim_start_matches('$'),
-        win_index
-    ));
-    match std::fs::read_to_string(&path) {
-        Ok(text) => json_string_field(&text, "description").unwrap_or_default(),
-        Err(_) => String::new(),
+/// Read the ssh destination off the pane's tty: `pane_current_command` only
+/// reports `ssh`, so the host has to come from the process arguments.
+fn ssh_host_for_tty(tty: &str) -> Option<String> {
+    let tty = tty.trim().trim_start_matches("/dev/");
+    if tty.is_empty() {
+        return None;
     }
+    let out = Command::new("ps")
+        .args(["-t", tty, "-o", "args="])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(ssh_host_from_command_line)
 }
 
 fn pr_for_pane(ctx: &Ctx, pane: &str) -> Option<PullRequestStatus> {

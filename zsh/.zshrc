@@ -119,3 +119,6 @@ zle -N fzf-file-at
 bindkey '@' fzf-file-at
 # CF CLI completions
 [[ -f "/Users/alec/.config/cf/completions/_cf.zsh" ]] && source "/Users/alec/.config/cf/completions/_cf.zsh"
+
+# ponytail: ssh leaves the tty in mouse-reporting/altscreen mode when the link dies; reset on exit
+ssh() { command ssh "$@"; local r=$?; printf '\e[?1000l\e[?1002l\e[?1003l\e[?1006l\e[?1049l\e[?25h'; stty sane; return $r }

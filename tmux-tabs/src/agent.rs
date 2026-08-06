@@ -24,12 +24,11 @@ pub fn windows_json(windows: &[Window]) -> String {
             out.push_str(",\n");
         }
         out.push_str(&format!(
-            "  {{\"index\":\"{}\",\"window_id\":\"{}\",\"tab_id\":\"{}\",\"name\":\"{}\",\"description\":\"{}\",\"title\":\"{}\",\"path\":\"{}\",\"pane\":\"{}\",\"command\":\"{}\",\"active\":{}}}",
+            "  {{\"index\":\"{}\",\"window_id\":\"{}\",\"tab_id\":\"{}\",\"name\":\"{}\",\"title\":\"{}\",\"path\":\"{}\",\"pane\":\"{}\",\"command\":\"{}\",\"active\":{}}}",
             json_escape(&w.index),
             json_escape(&w.window_id),
             json_escape(&w.tab_id),
             json_escape(&w.name),
-            json_escape(&w.description),
             json_escape(&w.title),
             json_escape(&w.path),
             json_escape(&w.pane),
@@ -60,30 +59,16 @@ pub fn find_window<'a>(windows: &'a [Window], reference: &str) -> Option<&'a Win
         .find(|w| w.index == query)
         .or_else(|| {
             windows.iter().find(|w| {
-                [
-                    &w.name,
-                    &w.description,
-                    &w.title,
-                    &w.path,
-                    &w.tab_id,
-                    &w.window_id,
-                ]
-                .iter()
-                .any(|value| value.to_lowercase() == query)
+                [&w.name, &w.title, &w.path, &w.tab_id, &w.window_id]
+                    .iter()
+                    .any(|value| value.to_lowercase() == query)
             })
         })
         .or_else(|| {
             windows.iter().find(|w| {
-                [
-                    &w.name,
-                    &w.description,
-                    &w.title,
-                    &w.path,
-                    &w.tab_id,
-                    &w.window_id,
-                ]
-                .iter()
-                .any(|value| value.to_lowercase().contains(&query))
+                [&w.name, &w.title, &w.path, &w.tab_id, &w.window_id]
+                    .iter()
+                    .any(|value| value.to_lowercase().contains(&query))
             })
         })
 }
@@ -195,7 +180,7 @@ mod tests {
                 ["list-panes", "-s", "-F", _] => Ok("1|%1|zsh|agent|/repo".to_string()),
                 ["display-message", "-p", "#{session_id}"] => Ok("$1".to_string()),
                 ["list-windows", "-F", _] => Ok("1|@1|tab_1|Agent|0|*|agent|/repo".to_string()),
-                ["list-panes", "-t", "1", "-F", _] => Ok("%1|0|0|1|zsh|agent|/repo".to_string()),
+                ["list-panes", "-t", "1", "-F", _] => Ok("%1|0|0|1|zsh|agent|/repo|/dev/ttys001".to_string()),
                 ["display-message", "-p", "-t", "%1", "#{window_width}"] => Ok("120".to_string()),
                 ["set-buffer", ..] if self.fail_set_buffer => {
                     Err(io::Error::new(io::ErrorKind::Other, "set failed"))
@@ -213,7 +198,7 @@ mod tests {
         }
     }
 
-    fn window(index: &str, name: &str, description: &str, path: &str) -> Window {
+    fn window(index: &str, name: &str, path: &str) -> Window {
         Window {
             index: index.to_string(),
             window_id: format!("@{index}"),
@@ -229,7 +214,6 @@ mod tests {
             pane: format!("%{index}"),
             panes: vec![format!("%{index}")],
             command: "pi".to_string(),
-            description: description.to_string(),
             pr: Some(PullRequestStatus {
                 number: 1,
                 title: "PR".to_string(),
@@ -242,24 +226,22 @@ mod tests {
 
     #[test]
     fn list_json_exposes_agent_addressable_fields() {
-        let json = windows_json(&[window("2", "Sidebar Naming", "renaming tmux tabs", "/repo")]);
+        let json = windows_json(&[window("2", "Sidebar Naming", "/repo")]);
 
         assert!(json.contains("\"index\":\"2\""));
         assert!(json.contains("\"name\":\"Sidebar Naming\""));
-        assert!(json.contains("\"description\":\"renaming tmux tabs\""));
         assert!(json.contains("\"pane\":\"%2\""));
         assert!(json.contains("\"tab_id\":\"tab_2\""));
     }
 
     #[test]
-    fn finds_window_by_tab_mention_name_description_or_index() {
+    fn finds_window_by_tab_mention_name_or_index() {
         let windows = vec![
-            window("1", "Tests", "running tests", "/repo"),
-            window("2", "Sidebar Naming", "renaming tmux tabs", "/repo/sidebar"),
+            window("1", "Tests", "/repo"),
+            window("2", "Sidebar Naming", "/repo/sidebar"),
         ];
 
         assert_eq!(find_window(&windows, "@tab:sidebar").unwrap().index, "2");
-        assert_eq!(find_window(&windows, "renaming").unwrap().index, "2");
         assert_eq!(find_window(&windows, "1").unwrap().name, "Tests");
         assert!(find_window(&windows, "missing").is_none());
     }
@@ -267,8 +249,8 @@ mod tests {
     #[test]
     fn section_add_and_remove_resolve_references_to_window_ids() {
         let windows = vec![
-            window("1", "Tests", "running tests", "/repo"),
-            window("2", "Sidebar Naming", "renaming tmux tabs", "/repo/sidebar"),
+            window("1", "Tests", "/repo"),
+            window("2", "Sidebar Naming", "/repo/sidebar"),
         ];
         let mut layout = SectionLayout::default();
 
@@ -284,7 +266,7 @@ mod tests {
             &mut layout,
             &windows,
             "Review",
-            "renaming"
+            "sidebar naming"
         ));
         assert!(layout.sections[0].windows.is_empty());
     }

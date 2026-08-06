@@ -152,13 +152,7 @@ impl Runtime {
             Action::SwitchTo(index) => {
                 let actual = display(&self.t, "#{window_index}");
                 if index != actual {
-                    move_sidebar_to_window(
-                        &self.t,
-                        &self.ctx,
-                        &self.pane_id,
-                        &index,
-                        &self.state.windows,
-                    );
+                    move_sidebar_to_window(&self.t, &self.ctx, &self.pane_id, &index);
                 }
                 clear_ready_panes(&self.ctx, &self.window_panes(&index));
                 self.state.current_window = index;
@@ -222,13 +216,7 @@ impl Runtime {
         if index == self.state.current_window {
             let next = adjacent_sidebar_window(&self.state.windows, index, Direction::Prev);
             if !next.is_empty() && next != index {
-                move_sidebar_to_window(
-                    &self.t,
-                    &self.ctx,
-                    &self.pane_id,
-                    &next,
-                    &self.state.windows,
-                );
+                move_sidebar_to_window(&self.t, &self.ctx, &self.pane_id, &next);
                 self.state.current_window = next;
             }
         }
@@ -240,13 +228,7 @@ impl Runtime {
     fn follow_focus(&mut self, term: &Term) {
         let active = display(&self.t, "#{window_index}");
         if !active.is_empty() && active != self.state.current_window {
-            move_sidebar_to_window(
-                &self.t,
-                &self.ctx,
-                &self.pane_id,
-                &active,
-                &self.state.windows,
-            );
+            move_sidebar_to_window(&self.t, &self.ctx, &self.pane_id, &active);
             self.state.current_window = active;
             self.refresh_windows(term);
         }
@@ -258,7 +240,6 @@ impl Runtime {
                 .t
                 .run(&["select-pane", "-t", &self.pane_id, "-T", "tmux-tabs"]);
         }
-        crate::descriptions::spawn_refresher(self.ctx.clone());
 
         enable_raw_mode()?;
         let mut stdout = io::stdout();
