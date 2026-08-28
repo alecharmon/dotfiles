@@ -67,6 +67,42 @@ if [ ! -d "$ZSH_CUSTOM/plugins/zsh-fzf-history-search" ]; then
     git clone https://github.com/joshskidmore/zsh-fzf-history-search "$ZSH_CUSTOM/plugins/zsh-fzf-history-search"
 fi
 
+# herdr (terminal workspace manager) + its plugins.
+# Preview channel is required by herdr-mirror (needs the terminal session streams).
+ensure_herdr() {
+    if ! command -v herdr &>/dev/null; then
+        echo "==> Installing herdr..."
+        curl -fsSL https://herdr.dev/install | sh || {
+            echo "==> WARNING: herdr install failed; skipping herdr plugins." >&2
+            return 0
+        }
+    fi
+    command -v herdr &>/dev/null || return 0
+    herdr channel set preview
+    echo "==> Installing herdr plugins..."
+    for plugin in \
+        kakigakki/herdr-auto-namer \
+        wyattjoh/herdr-plugin-gh-pr \
+        miiraheart/herdr-beads \
+        nikok6/herdr-mirror; do
+        herdr plugin install -y "$plugin" || echo "==> WARNING: failed to install herdr plugin $plugin" >&2
+    done
+}
+ensure_herdr
+
+# beads: the real bd via mise, fronted by scripts/bd (ssh client for the remote workspace).
+ensure_beads() {
+    if command -v mise &>/dev/null; then
+        echo "==> Installing beads (bd)..."
+        mise use -g "github:gastownhall/beads@latest" || echo "==> WARNING: mise failed to install beads." >&2
+    else
+        echo "==> WARNING: mise not found; skipping beads install." >&2
+    fi
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$DOTFILES_DIR/scripts/bd" "$HOME/.local/bin/bd"
+}
+ensure_beads
+
 # Install gh extensions
 if command -v gh &>/dev/null; then
     echo "==> Installing gh extensions..."

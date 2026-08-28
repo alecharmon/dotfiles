@@ -1,0 +1,20 @@
+#!/bin/bash
+# bd -> the beads workspace on ah-beads.exe.xyz (/home/exedev/beads-data).
+# ponytail: bd has no HTTP client for its own v0 API, so ssh is the client.
+# Point BEADS_SSH_HOST/BEADS_REMOTE_DIR elsewhere, or set BEADS_LOCAL=1 to use the real local bd.
+set -euo pipefail
+
+if [[ -n "${BEADS_LOCAL:-}" ]]; then
+  real=$(mise which bd 2>/dev/null) || { echo "bd: local bd not installed (mise use -g github:gastownhall/beads)" >&2; exit 1; }
+  exec "$real" "$@"
+fi
+
+host=${BEADS_SSH_HOST:-ah-beads.exe.xyz}
+dir=${BEADS_REMOTE_DIR:-/home/exedev/beads-data}
+cmd="cd ${dir} && exec ~/.local/bin/bd"
+for a in "$@"; do cmd+=" $(printf %q "$a")"; done
+
+tty_flag=(-T); [[ -t 0 && -t 1 ]] && tty_flag=(-t)
+exec ssh "${tty_flag[@]}" -o ConnectTimeout=15 \
+  -o ControlMaster=auto -o ControlPath="$HOME/.ssh/cm-%r@%h:%p" -o ControlPersist=10m \
+  "$host" "bash --noprofile --norc -c $(printf %q "$cmd")"
