@@ -244,13 +244,6 @@ space_window_observer:subscribe("aerospace_focus_change", function(env)
     end
 end)
 
-spaces_indicator:subscribe("swap_menus_and_spaces", function(env)
-    local currently_on = spaces_indicator:query().icon.value == icons.switch.on
-    spaces_indicator:set({
-        icon = currently_on and icons.switch.off or icons.switch.on
-    })
-end)
-
 spaces_indicator:subscribe("mouse.entered", function(env)
     sbar.animate("tanh", 30, function()
         spaces_indicator:set({
@@ -291,8 +284,4 @@ spaces_indicator:subscribe("mouse.exited", function(env)
             }
         })
     end)
-end)
-
-spaces_indicator:subscribe("mouse.clicked", function(env)
-    sbar.trigger("swap_menus_and_spaces")
 end)
