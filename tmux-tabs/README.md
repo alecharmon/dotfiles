@@ -77,6 +77,7 @@ The launcher builds this automatically on first use. `setup.sh` /
 
 Windows whose foreground command is `herdr` are grouped into a `herdr` section
 pinned to the top of the sidebar, above custom sections and folder groups.
+ssh sessions to a host containing `herdr` (e.g. `ah-herdr.exe.xyz`) join it too.
 
 ## ssh sessions
 

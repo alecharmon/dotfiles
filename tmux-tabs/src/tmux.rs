@@ -353,10 +353,13 @@ pub fn tmux_windows<T: Tmux>(t: &T, ctx: &Ctx) -> Vec<Window> {
             last: flags.contains('-'),
             title: display_title,
             path: display_path.clone(),
-            group: if is_ssh_command(&command) {
-                SSH_GROUP.to_string()
-            } else if is_herdr_command(&command) {
+            // ssh into a herdr box (e.g. ah-herdr.exe.xyz) counts as herdr.
+            group: if is_herdr_command(&command)
+                || ssh_host.as_deref().is_some_and(|h| h.contains("herdr"))
+            {
                 HERDR_GROUP.to_string()
+            } else if is_ssh_command(&command) {
+                SSH_GROUP.to_string()
             } else {
                 project_group(&display_path, &ctx.home, &ctx.cwd)
             },
