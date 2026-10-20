@@ -260,6 +260,12 @@ run = 'layout floating'
 if.app-id = 'com.apple.MobileSMS'
 run = 'layout floating'
 
+# Ivy / Ivy-DEV: activates itself on launch; hand focus back if it grabbed it.
+# ponytail: also fires when you open an Ivy window on purpose; narrow if that bites.
+[[on-window-detected]]
+if.app-name-regex-substring = '^Ivy'
+run = '''exec-and-forget sleep 0.3; aerospace list-windows --focused --format '%{app-name}' | grep -q '^Ivy' && aerospace focus-back-and-forth'''
+
 # Hover terminal: float Ghostty windows titled "hover-terminal" on workspace 9
 # (This rule is checked first due to the window-title match, overriding the general Ghostty rule above)
 [[on-window-detected]]
