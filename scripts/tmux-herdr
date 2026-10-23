@@ -1,0 +1,8 @@
+#!/bin/sh
+# Hyper-4: switch to the "herdr" tmux session (ssh'd into the herdr box), creating it if needed.
+host=ah-herdr.exe.xyz
+
+# herdr attaches to its persistent session if one is already running on the box.
+tmux has-session -t =herdr 2>/dev/null ||
+  tmux new-session -d -s herdr -n herdr "ssh -t $host 'exec \$SHELL -lc herdr'"
+tmux switch-client -t =herdr
